@@ -16,5 +16,9 @@ data/*.db-wal
 out/
 runs/
 wandb/
+logs/
 *.safetensors
 *.gguf
+
+# Compiled / cached
+unsloth_compiled_cache/
