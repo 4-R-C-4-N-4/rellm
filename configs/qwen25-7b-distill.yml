@@ -1,0 +1,35 @@
+# Unsloth QLoRA distillation of Qwen2.5-7B-Instruct on guru teacher outputs.
+
+base_model: unsloth/Qwen2.5-7B-Instruct-bnb-4bit
+chat_template: qwen-2.5
+max_seq_length: 4096
+
+# LoRA — r=32 all-linear is the standard "domain adaptation" recipe.
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Optimization — sized for a single 24GB card.
+batch_size: 2
+grad_accum: 8        # effective batch = 16
+epochs: 3
+learning_rate: 2.0e-4
+warmup_ratio: 0.03
+lr_scheduler: cosine
+optim: adamw_8bit
+
+# Logging / checkpoints
+logging_steps: 10
+eval_steps: 100
+save_steps: 200
+save_total_limit: 3
+report_to: none
+seed: 42

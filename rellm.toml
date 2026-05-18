@@ -1,0 +1,28 @@
+# rellm — distillation pipeline config.
+
+[guru]
+# Paths to the upstream guru project that produces the source data.
+repo       = "/home/ivy/Work/guru"
+db         = "/home/ivy/Work/guru/data/guru.db"
+corpus_dir = "/home/ivy/Work/guru/corpus"
+taxonomy   = "/home/ivy/Work/guru/concepts/taxonomy.toml"
+
+[rellm]
+# Where this project lands snapshots, exports, and training artifacts.
+# Paths are resolved relative to the directory containing this file.
+data_dir  = "data"
+snapshots = "data/snapshots"
+exports   = "data/exports"
+
+[model]
+# Default base model for distillation. Unsloth's 4-bit BNB build of
+# Qwen2.5-7B-Instruct. Swap to Qwen3-8B once benchmarked.
+base    = "unsloth/Qwen2.5-7B-Instruct-bnb-4bit"
+
+# Teacher signature in staged_tags. Used to filter training rows.
+teacher = "Qwen3.5-27B-UD-Q4_K_XL.gguf"
+
+[prompt]
+# staged_tags prompt_version filter. Bump when the upstream prompt changes
+# meaningfully so old + new outputs aren't mixed in training.
+version = "v1"

@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Large, reproducible artifacts
+data/snapshots/
+data/exports/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Training outputs
+out/
+runs/
+wandb/
+*.safetensors
+*.gguf
