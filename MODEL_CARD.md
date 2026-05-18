@@ -35,7 +35,7 @@ Concepts scoring 0 are omitted. The output is strict JSON — no markdown, no pr
 
 ## Why it exists
 
-The guru pipeline indexes a multi-tradition corpus of mystical texts by tagging each passage against a working taxonomy of ~60 comparative-religion concepts (e.g. `theosis`, `paradox_as_teaching`, `divine_marriage`, `archons`). Two upstream options had problems:
+The guru pipeline indexes a multi-tradition corpus of mystical texts by tagging each passage against a working taxonomy of ~80 (and growing) comparative-religion concepts (e.g. `theosis`, `paradox_as_teaching`, `divine_marriage`, `archons`). Two upstream options had problems:
 
 - **The 27B teacher** produces high-quality labels but is too slow to re-tag the full corpus on every taxonomy revision.
 - **The off-the-shelf 7B base model** is fast enough but is unreliable: it under-tags (recall 0.21), invents out-of-taxonomy IDs, and misjudges severity.
@@ -140,7 +140,7 @@ Deviating from this format will degrade quality — the model was trained on a s
 
 ## Limitations
 
-- **Domain-locked.** Trained on Western and Mediterranean mystical traditions (Neoplatonism, Hermeticism, Gnosticism, Christian mysticism, etc.) plus Egyptian, Mesopotamian, Zoroastrian, and Taoist sources. The Buddhist and Hindu corpora were excluded from this training run; expect weaker calibration there.
+- **Domain-locked.** Trained on mystical traditions such as Neoplatonism, Hermeticism, Gnosticism, Christian mysticism, Egyptian, Mesopotamian, Zoroastrian, and Taoist sources. The Buddhist and Hindu corpora were excluded from this training run; expect weaker calibration there.
 - **Taxonomy-bound.** Scoring is conditioned on the concept list passed in the prompt. The model will faithfully ignore concepts not given to it; if you change the taxonomy meaningfully, retrain.
 - **Imbalanced concepts.** A handful of low-frequency concepts (`archons`, `kenoma`, `pleroma`, `self_examination`) have F1 ≈ 0 against human labels — too few teacher positives to learn a reliable boundary. Filter or boost these in downstream review.
 - **Latency.** Greedy decoding at ~4 s/chunk on a single 24 GB GPU is fine for batch corpus tagging but not for interactive use. Use the Q4_K_M GGUF for faster local inference.
@@ -148,7 +148,7 @@ Deviating from this format will degrade quality — the model was trained on a s
 
 ## License
 
-Apache 2.0 — same as the upstream Qwen2.5-7B-Instruct base model.
+Apache 2.0
 
 ## Citation
 
