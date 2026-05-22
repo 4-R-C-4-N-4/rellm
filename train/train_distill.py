@@ -75,6 +75,21 @@ def _train(args: argparse.Namespace) -> None:
         _format, remove_columns=["chunk_id", "tradition_id", "messages"]
     )
 
+    # Drop examples whose tokenized length exceeds max_seq_length. SFTTrainer
+    # would otherwise right-truncate, which cuts the assistant response — the
+    # actual training target. Dropping is better than learning to emit nothing.
+    max_len = cfg["max_seq_length"]
+    def _within(ex: dict) -> bool:
+        return len(tokenizer(ex["text"])["input_ids"]) <= max_len
+    n_train_pre, n_val_pre = len(train_ds), len(val_ds)
+    train_ds = train_ds.filter(_within)
+    val_ds = val_ds.filter(_within)
+    print(
+        f"filtered to max_seq_length={max_len}: "
+        f"train {n_train_pre} → {len(train_ds)} (-{n_train_pre - len(train_ds)}), "
+        f"val {n_val_pre} → {len(val_ds)} (-{n_val_pre - len(val_ds)})"
+    )
+
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,8 +112,18 @@ def _train(args: argparse.Namespace) -> None:
             logging_steps=cfg.get("logging_steps", 10),
             eval_strategy="steps",
             eval_steps=cfg.get("eval_steps", 100),
+            per_device_eval_batch_size=cfg.get("eval_batch_size", 1),
+            # Discard logits during eval — keep only the loss. Without this,
+            # the trainer accumulates per-token logits across all val examples
+            # on GPU (~vocab × seq × N_val × 4 bytes), which OOMs at long ctx.
+            prediction_loss_only=True,
+            save_strategy="steps",
             save_steps=cfg.get("save_steps", 200),
             save_total_limit=cfg.get("save_total_limit", 3),
+            load_best_model_at_end=cfg.get("load_best_model_at_end", False),
+            metric_for_best_model=cfg.get("metric_for_best_model", "eval_loss"),
+            greater_is_better=cfg.get("greater_is_better", False),
+            packing=cfg.get("packing", False),
             bf16=torch.cuda.is_bf16_supported(),
             fp16=not torch.cuda.is_bf16_supported(),
             seed=cfg.get("seed", 42),

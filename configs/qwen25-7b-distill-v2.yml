@@ -1,0 +1,59 @@
+# Unsloth QLoRA distillation of Qwen2.5-7B-Instruct on the 80-concept teacher
+# pass (data/exports/2026-05-21T16-49-07Z, ~2,600 chunks, 88 concepts).
+#
+# Differences from v1's qwen25-7b-distill.yml:
+#   - lr 2e-4 → 1.5e-4 (cooler step, ~20% more train steps per epoch with the
+#     bigger dataset)
+#   - max_seq_length 4096 → 8192 (88-concept taxonomy + chunk pushes every
+#     example over 4096; median 5137 / max 6352. 4096 silently truncated the
+#     assistant response — v1 had this bug too but at 61 concepts it bit less)
+#   - batch_size 2 → 1, grad_accum 8 → 16 (keep effective batch 16, halve
+#     activation memory so 8k ctx fits in 24GB during backward)
+#   - load_best_model_at_end: true (export the best-val-loss checkpoint, not
+#     just the last one)
+#   - LoRA r kept at 32 (tried 64; 8k ctx backward needed ~4 GiB more than
+#     available — see logs/train-v2.attempt2-r64-oom.log)
+#   - packing: off (at 8k ctx, packing balloons every batch to 8k and OOMs)
+
+base_model: unsloth/Qwen2.5-7B-Instruct-bnb-4bit
+chat_template: qwen-2.5
+# 5632 is the largest ctx the 3090 backward fits at r=32 batch=1 (6144 still
+# OOMed by 800 MiB on the longest examples). Trainer drops the 171 examples
+# (6.6%) over 5632 — training set is 2427 vs raw 2598. Better than letting
+# SFTTrainer right-truncate, which would cut the assistant JSON response.
+max_seq_length: 5632
+
+# LoRA — same r/α as v1 (r=64 OOMed at 8k ctx; v2's gain comes from data).
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Optimization — sized for a single 24GB card with 6k context.
+batch_size: 1
+grad_accum: 16       # effective batch = 16
+epochs: 3
+learning_rate: 1.5e-4
+warmup_ratio: 0.03
+lr_scheduler: cosine
+# Paged optimizer offloads state to CPU when GPU is tight — saves ~1 GiB.
+optim: paged_adamw_8bit
+
+# Logging / checkpoints
+logging_steps: 10
+eval_steps: 100
+save_steps: 100              # must match eval_steps for load_best_model_at_end
+save_total_limit: 3
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+packing: false
+report_to: none
+seed: 42
