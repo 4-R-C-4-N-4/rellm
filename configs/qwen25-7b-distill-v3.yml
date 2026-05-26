@@ -1,0 +1,61 @@
+# Unsloth QLoRA distillation of Qwen2.5-7B-Instruct — v3.
+# Data: data/exports/2026-05-25T13-52-51Z (2,808 chunks, 88 concepts).
+#
+# What changed vs v2 (data only — every hyperparameter below is identical to
+# qwen25-7b-distill-v2.yml so the v2→v3 delta isolates the data effect):
+#   - Re-exported from the 2026-05-25 snapshot after the human-review push.
+#   - Targets are now 48% human-ACCEPTED (12,187 tags) vs v2's near-entirely
+#     unreviewed teacher targets. Human-rejected tags are dropped (status filter
+#     pending,accepted), removing 789 now-rejected positives v2 was trained on.
+#   - +6,000 human-accepted positives vs v2 (3,621 added to existing chunks,
+#     2,412 from 210 newly-tagged chunks). This is the recall lever: the gauge
+#     put v2 recall at 0.415 against human truth; these are endorsed positives
+#     v2 never saw.
+#   - Held-out test set preserved: assign_split() is a deterministic chunk_id
+#     hash, so all 129 surviving v2-test chunks land in v3 test again (0 leak).
+#     v3 re-benches on the identical held-out chunks the gauge used.
+#
+# CAVEAT (24GB 3090 ceiling): denser targets push 476 examples (17%) over
+# max_seq_length=5632, vs 6.6% for v2 — and they're the densest-tagged chunks,
+# the most recall-relevant. They get dropped (right-truncation would cut the
+# assistant JSON). Fully exploiting v3's signal wants a bigger card at >5632 ctx.
+
+base_model: unsloth/Qwen2.5-7B-Instruct-bnb-4bit
+chat_template: qwen-2.5
+# 5632 is the largest ctx the 3090 backward fits at r=32 batch=1 (6144 OOMed by
+# 800 MiB on v2's longest examples). At v3's label density this drops 476/2808.
+max_seq_length: 5632
+
+# LoRA — identical to v2 (r=64 OOMs at this ctx; the v2→v3 gain is data, not capacity).
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+# Optimization — identical to v2.
+batch_size: 1
+grad_accum: 16       # effective batch = 16
+epochs: 3
+learning_rate: 1.5e-4
+warmup_ratio: 0.03
+lr_scheduler: cosine
+optim: paged_adamw_8bit
+
+# Logging / checkpoints — identical to v2.
+logging_steps: 10
+eval_steps: 100
+save_steps: 100              # must match eval_steps for load_best_model_at_end
+save_total_limit: 3
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+packing: false
+report_to: none
+seed: 42

@@ -18,9 +18,9 @@ tags:
 
 # qwen2.5-7b-rellm
 
-A distilled chunk→concept tagger for the [guru](https://github.com/4-R-C-4-N-4) comparative-religion pipeline. Fine-tuned from [Qwen2.5-7B-Instruct](https://huggingface.co/unsloth/Qwen2.5-7B-Instruct-bnb-4bit) on 2,598 (passage, tag-set) pairs labeled by a larger 27B teacher, this model scores passages from mystical texts against a curated taxonomy of comparative-religion concepts.
+A distilled chunk→concept tagger for the [guru](https://github.com/4-R-C-4-N-4) comparative-religion pipeline. Fine-tuned from [Qwen2.5-7B-Instruct](https://huggingface.co/unsloth/Qwen2.5-7B-Instruct-bnb-4bit) on 2,808 (passage, tag-set) pairs — labels from a larger 27B teacher, refined by human review — this model scores passages from mystical texts against a curated taxonomy of comparative-religion concepts.
 
-**Current version: v2** — see [Versions](#versions) for v1.
+**Current version: v3** — see [Versions](#versions) for v1 and v2.
 
 Training pipeline: [github.com/4-R-C-4-N-4/rellm](https://github.com/4-R-C-4-N-4/rellm)
 
@@ -40,60 +40,65 @@ Concepts scoring 0 are omitted. The output is strict JSON — no markdown, no pr
 The guru pipeline indexes a multi-tradition corpus of mystical texts by tagging each passage against a working taxonomy of ~88 (and growing) comparative-religion concepts (e.g. `theosis`, `paradox_as_teaching`, `divine_marriage`, `archons`). Two upstream options had problems:
 
 - **The 27B teacher** produces high-quality labels but is too slow to re-tag the full corpus on every taxonomy revision.
-- **The off-the-shelf 7B base model** is fast enough but is unreliable: it under-tags (recall 0.16 on v2 eval), invents out-of-taxonomy IDs (9 in 130 chunks), and misjudges severity.
+- **The off-the-shelf 7B base model** is fast enough but is unreliable: it under-tags (recall 0.12 vs human labels on the held-out test), invents out-of-taxonomy IDs (9 in 130 chunks), and misjudges severity.
 
 This model closes most of that gap at the 7B compute budget.
 
-## Evaluation (v2)
+## Evaluation (v3)
 
-Held-out test split from the same data distribution. `base` = Qwen2.5-7B-Instruct (no fine-tuning), `v2` = this model. Both queried at temperature 0 with identical system + user prompts via llama-server.
+Held-out test split from the same data distribution, scored against both the 27B teacher's labels and independent human accept/reject verdicts. `base` = Qwen2.5-7B-Instruct (no fine-tuning). All models queried at temperature 0 with identical prompts via llama-server, on the identical held-out chunks.
+
+### vs human-graded labels (held-out test, 118 chunks / 763 graded cells)
+
+Strongest signal — human verdicts are an independent ground truth.
+
+| Model | Precision | Recall |   F1  | Specificity |
+|-------|----------:|-------:|------:|------------:|
+| base  |     0.833 |  0.118 | 0.207 |       0.953 |
+| v1    |     0.673 |  0.356 | 0.466 |       0.655 |
+| v2    |     0.759 |  0.415 | 0.537 |       0.737 |
+| **v3** | **0.769** | **0.524** | **0.623** | 0.686 |
+| 27B teacher (reference) | 0.666 | 1.000 | 0.799 | 0.000 |
+
+v3 beats every prior version on F1 and recall, and **its precision (0.769) clears the 27B teacher's (0.666)** — the student now rejects teacher mistakes rather than just mimicking. (The teacher's recall is 1.0 by construction — humans only reviewed tags it emitted — so its precision is the comparable number.)
 
 ### vs teacher labels (130 chunks, 88 concepts)
 
 | Model | Precision | Recall |   F1  | Macro-F1 |  MAE | Parse rate | OOT-IDs | Lat (s) |
 |-------|----------:|-------:|------:|---------:|-----:|-----------:|--------:|--------:|
-| base  |     0.328 |  0.162 | 0.217 |    0.182 | 0.53 |      96.2% |       9 |    4.00 |
-| v2    | **0.597** | **0.602** | **0.599** | **0.525** | 0.42 | 99.2% |  2 | 4.72 |
+| base  |     0.398 |  0.152 | 0.220 |    0.176 | 0.53 |      96.2% |       9 |    3.97 |
+| v1    |     0.621 |  0.509 | 0.560 |    0.386 | 0.37 |     100.0% |       2 |    4.94 |
+| v2    |     0.669 |  0.518 | 0.584 |    0.502 | 0.42 |      99.2% |       2 |    4.75 |
+| **v3** | 0.636 | **0.585** | **0.609** | **0.522** | 0.42 | 96.9% | **0** | 5.83 |
 
-### vs human-graded labels (held-out test chunks, 92 chunks)
+### Where v3 moves the needle vs v2
 
-Strongest signal — humans labels are an independent ground truth.
+v3's gain is **recall without a precision cost**: against human truth, recall 0.415 → 0.524 (+0.109) while precision held (0.759 → 0.769). It came purely from data — identical hyperparameters, but labels now 48% human-verified with ~6,000 more human-accepted positives. Concepts v2 was blind to or had lost recover (`archons` 0 → 0.667, `living_god` +0.166, `body_as_obstacle` +0.154), and v3 invents zero out-of-taxonomy IDs (v2: 2). The cost is small: parse rate dips to 96.9% and latency rises to ~5.8 s/chunk, both because v3 emits more tags.
 
-| Model | Precision | Recall |   F1  | Specificity |
-|-------|----------:|-------:|------:|------------:|
-| base  |     0.750 |  0.158 | 0.261 |       0.963 |
-| v2    | **0.600** | **0.474** | **0.529** | **0.778** |
-| 27B teacher (reference) | 0.378 | 1.000 | 0.549 | 0.000 |
+Full v2↔v3 comparison: [`docs/v2-vs-v3-comparison.md`](https://github.com/4-R-C-4-N-4/rellm/blob/main/docs/v2-vs-v3-comparison.md). Earlier v1↔v2: [`docs/v1-vs-v2-comparison.md`](https://github.com/4-R-C-4-N-4/rellm/blob/main/docs/v1-vs-v2-comparison.md).
 
-v2 at F1=0.529 on test chunks vs human ground truth essentially matches the 27B teacher's own F1 of 0.549 at 7B compute cost — the distillation goal.
-
-### Where v2 moves the needle vs v1
-
-v2's biggest gain over v1 is *uniformity* across the 88-concept taxonomy: macro-F1 0.398 → 0.525 (+0.127), driven by previously-blind concepts (`prayer`, `theurgy`, `detachment_gelassenheit`, `wu_wei`, `evil_as_privation`, etc.) and previously-underrepresented traditions (mesopotamian +0.32, jewish_mysticism +0.20, buddhism +0.19, sufism +0.14). Trade: small regressions on traditions v1 over-specialized in (egyptian −0.06, hermeticism −0.08, western_esoteric −0.03) and on a handful of high-frequency concepts that lose data share under the broader distribution (`living_god` −0.21, `body_as_obstacle` −0.17).
-
-Full v1↔v2 comparison: [`docs/v1-vs-v2-comparison.md`](https://github.com/4-R-C-4-N-4/rellm/blob/main/docs/v1-vs-v2-comparison.md).
-
-## Training (v2)
+## Training (v3)
 
 - **Base:** `unsloth/Qwen2.5-7B-Instruct-bnb-4bit`
 - **Method:** Supervised fine-tuning (TRL `SFTTrainer`) with QLoRA via [Unsloth](https://github.com/unslothai/unsloth)
 - **LoRA:** r=32, α=64, dropout=0, applied to all attention + MLP projections (`q,k,v,o,gate,up,down`)
-- **Schedule:** 3 epochs, batch 1 × grad-accum 16 (effective 16), paged AdamW-8bit, lr 1.5e-4, cosine, warmup 0.03
-- **Sequence length:** 5632 (88-concept prompts run median 5137 tokens; 5632 is the largest context that fits backward on a 24 GB 3090)
+- **Schedule:** 3 epochs, batch 1 × grad-accum 16 (effective 16), paged AdamW-8bit, lr 1.5e-4, cosine, warmup 0.03 — *identical to v2, so the v2→v3 gain isolates the data effect*
+- **Sequence length:** 5632 (88-concept prompts run median ~5170 tokens; 5632 is the largest context that fits backward on a 24 GB 3090)
 - **Chat template:** `qwen-2.5`
-- **Checkpoint:** best-by-val-loss
+- **Checkpoint:** best-by-val-loss (eval_loss 0.2912)
 - **Hardware:** single 24 GB GPU (NVIDIA RTX 3090)
-- **Wall-clock:** 15h 51m
+- **Wall-clock:** 14h 50m
 - **Seed:** 42
 
-### Training data (v2)
+### Training data (v3)
 
-Source: `staged_tags` table of a guru.db snapshot, filtered to rows produced by teacher `Qwen3.5-27B-UD-Q4_K_XL.gguf` with prompt version `v1`, status ∈ {pending, accepted}.
+Source: `staged_tags` table of a guru.db snapshot taken after a human-review push, filtered to rows produced by teacher `Qwen3.5-27B-UD-Q4_K_XL.gguf` with prompt version `v1`, status ∈ {pending, accepted} — so human-**rejected** tags are excluded.
 
-- **2,598 chunks** across **88 concepts** (in-export)
-- Splits: **2,339 train / 129 val / 130 test** (90/5/5, stratified by chunk_id)
-- 160 train chunks dropped during training because their tokenized length exceeded `max_seq_length=5632` (right-truncation would cut the assistant JSON response; better to drop)
-- Tradition mix (largest → smallest): neoplatonism, egyptian, taoism, greek_mystery, western_esoteric, zoroastrianism, jewish_mysticism, gnosticism, christian_mysticism, renaissance_hermeticism, hermeticism, buddhism, sufism, mesopotamian, platonism (plus a handful of single-chunk traditions). Compared to v1, **buddhism, sufism, and several Hindu lineages now have nonzero training signal.**
+- **2,808 chunks** across **88 concepts** (in-export)
+- **25,559 target tags: 48% human-accepted** (12,187), the rest unreviewed teacher labels, zero human-rejected. This is the key change from v2, whose targets were almost entirely unreviewed.
+- Splits: **2,538 train / 134 val / 136 test** (90/5/5, deterministic chunk_id hash — preserves the v2 held-out set for apples-to-apples eval)
+- 457 train+val chunks (17%) dropped during training because their tokenized length exceeded `max_seq_length=5632`; net **2,102 training examples**. The denser human-accepted labels make more examples exceed the 3090's context ceiling — fully exploiting the new signal wants a larger GPU.
+- The v2→v3 lever was **recall and label quality**, not precision cleanup: ~6,000 more human-accepted positives (added to existing chunks + 210 newly-tagged chunks) lifted held-out recall against human truth by +0.109 with no precision loss.
 
 ## Files in this repo
 
@@ -153,27 +158,31 @@ Deviating from this format will degrade quality — the model was trained on a s
 
 ## Versions
 
-| Tag | Date | F1 (vs teacher, full test) | Macro-F1 | Training data |
-|-----|------|---------------------------:|---------:|---------------|
-| v1  | 2026-05-13 | 0.577 (re-scored on v2-test) / 0.629 (v1-era) | 0.398 / 0.548 | 2,188 chunks, 61 concepts |
-| v2  | 2026-05-22 | **0.599** | **0.525** | 2,598 chunks, 88 concepts |
+All three versions re-scored on the same held-out test split with the same harness, so the columns are directly comparable (numbers differ slightly from each version's original card, which used the taxonomy and labels current at its release).
 
-Pin a specific version with `revision="v1"` or `revision="v2"` when downloading.
+| Tag | Date | F1 vs teacher | Macro-F1 | F1 vs human | Recall vs human | Training data |
+|-----|------|--------------:|---------:|------------:|----------------:|---------------|
+| v1  | 2026-05-13 | 0.560 | 0.386 | 0.466 | 0.356 | 2,188 chunks, 61 concepts |
+| v2  | 2026-05-22 | 0.584 | 0.502 | 0.537 | 0.415 | 2,598 chunks, 88 concepts |
+| **v3** | 2026-05-26 | **0.609** | **0.522** | **0.623** | **0.524** | 2,808 chunks, 88 concepts |
 
-### v1 (historical)
+Pin a specific version with `revision="v1"`, `revision="v2"`, or `revision="v3"` when downloading.
 
-The v1 release was trained on the 61-concept taxonomy snapshot from 2026-05-11 (2,188 SFT examples). Its model card reported F1=0.629 / Macro-F1=0.548 against the v1-era teacher labels on 103 test chunks, and F1=0.638 / Macro-F1=0.508 against 360 human-graded chunks. A v2-era sanity rerun against the original v1 snapshot reproduces F1=0.615 (drift due to running against the current 88-concept taxonomy file rather than the v1-era 61-concept one).
+### v1 / v2 (historical)
 
-v1 is preserved at the `v1` git tag on both the HF repo and the rellm GitHub repo. Use it if you need to reproduce earlier results exactly; otherwise prefer v2.
+**v1** (2026-05-13) was trained on the 61-concept taxonomy snapshot (2,188 SFT examples). **v2** (2026-05-22) expanded to the 88-concept taxonomy and ~2,600 chunks, lifting macro-F1 from broader concept coverage; its targets were almost entirely *unreviewed* teacher labels. **v3** keeps v2's taxonomy and hyperparameters but trains on human-reviewed labels (48% accepted, rejected dropped), which is what lifted recall.
+
+Both are preserved at the `v1` and `v2` git tags on the HF and GitHub repos. Use them to reproduce earlier results exactly; otherwise prefer v3.
 
 ## Limitations
 
-- **Domain-locked, but broader than v1.** v2 added training signal for buddhism, sufism, jewish_mysticism, and mesopotamian, but the corpus is still heavily Mediterranean / Greek-philosophical at the long tail. Calibration on East-Asian, South-Asian, and indigenous traditions remains weak.
+- **Occasional over-generation (parse rate 96.9%).** On ~3% of chunks v3 keeps emitting tag objects until it hits the token cap and truncates into invalid JSON. It's the flip side of v3's higher recall (it emits more), is non-deterministic even at temperature 0, and is *not* fixed by raising `max_tokens`. Handle downstream with a truncation-salvage parser or a retry on parse failure. (v2 parsed at 99.2%.)
+- **Domain-locked.** v3 broadened human-reviewed coverage across mid-frequency traditions (christian_mysticism, greek_mystery, taoism gained most), but the corpus is still heavily Mediterranean / Greek-philosophical at the long tail. Calibration on East-Asian, South-Asian, and indigenous traditions remains weak.
 - **Taxonomy-bound.** Scoring is conditioned on the concept list passed in the prompt. The model will faithfully ignore concepts not given to it; if you change the taxonomy meaningfully, retrain.
-- **Imbalanced concepts.** A handful of low-frequency concepts (`archons`, `pleroma`, `divine_intoxication`, `demiurge`) still have F1 ≈ 0 — too few teacher positives to learn a reliable boundary. Filter or boost these in downstream review.
-- **High-frequency concept drift.** v2 traded some precision on a handful of high-frequency concepts that dominated v1's training mass (`living_god` −0.21, `body_as_obstacle` −0.17, `apophatic_theology` −0.09) for broader coverage. If your downstream use is dominated by those concepts, v1 may still be competitive.
-- **Latency.** Greedy decoding at ~4.7 s/chunk on a single 24 GB GPU is fine for batch corpus tagging but not for interactive use. Use the Q4_K_M GGUF for faster local inference.
-- **Not a chat model anymore.** This is a tagging specialist. Don't expect general assistant behavior — it was tuned on a single task and prompt format.
+- **Imbalanced concepts.** A few low-frequency concepts still have weak boundaries — too few teacher positives. v3 regressed slightly vs v2 on `evil_as_privation` (0.42 → 0.24) and `hidden_sayings` (0.67 → 0.56); filter or boost these in downstream review. (v3 *recovered* several that earlier versions missed, e.g. `archons` 0 → 0.67, `living_god` +0.17.)
+- **Capacity-capped recall.** v3's denser labels push 17% of training examples past the 24 GB 3090's 5632-token ceiling, where they're dropped. Recall (0.524 vs human truth) is good but not teacher-level; closing the rest likely needs a larger GPU training at >5632 ctx, not more data.
+- **Latency.** Greedy decoding at ~5.8 s/chunk on a single 24 GB GPU (up from v2's 4.7, since v3 emits more) is fine for batch corpus tagging but not interactive use. Use the Q4_K_M GGUF for faster local inference.
+- **Not a chat model.** This is a tagging specialist. Don't expect general assistant behavior — it was tuned on a single task and prompt format.
 
 ## License
 
