@@ -1,11 +1,13 @@
 # rellm
 
-Distillation pipeline for the chunk→concept tagger used in the [guru](https://github.com/4-R-C-4-N-4) comparative-religion indexing project. Takes teacher labels (currently `Qwen3.5-27B`) from a `guru.db` snapshot, builds an SFT dataset, fine-tunes a 7B student with QLoRA, and exports adapter + merged + GGUF artifacts for production tagging.
+Distillation pipeline for the chunk→concept tagger used in the [guru](https://github.com/4-R-C-4-N-4) comparative-religion indexing project. Takes teacher labels (currently `Qwen3.5-27B`) from a `guru.db` snapshot, builds an SFT dataset, fine-tunes a smaller student with QLoRA, and exports adapter + merged + GGUF artifacts for production tagging.
 
-The current release is **v1** — `qwen2.5-7b-rellm` — published at  
-**🤗 [huggingface.co/4rc4n4/qwen2.5-7b-rellm](https://huggingface.co/4rc4n4/qwen2.5-7b-rellm)**
+**rellm is the pipeline, not a model.** It produces distilled tagger models, each published to its own 🤗 repo with its own release tags:
 
-If you just want the model, go there. This repo is for people who want to retrain it.
+- **`qwen2.5-7b-rellm`** — current release **v3** — [huggingface.co/4rc4n4/qwen2.5-7b-rellm](https://huggingface.co/4rc4n4/qwen2.5-7b-rellm)
+- **`qwen-3-4b-guru`** — a faster 4B production tagger (in progress; see [`docs/qwen-3-4b-guru-build-spec.md`](docs/qwen-3-4b-guru-build-spec.md))
+
+If you just want a model, go to its repo. This repo is for retraining them — each model's HF target lives in its config's `publish:` block, so adding a model is config, not code.
 
 ## Why distill?
 

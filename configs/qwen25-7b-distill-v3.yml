@@ -59,3 +59,10 @@ greater_is_better: false
 packing: false
 report_to: none
 seed: 42
+
+# Publish target — read by scripts/publish.py. Per model line; only the release
+# tag changes per version, so it's a CLI flag (--tag), not config here.
+publish:
+  hf_repo: 4rc4n4/qwen2.5-7b-rellm
+  model_card: MODEL_CARD.md
+  artifacts: ["adapter/**", "merged/**", "gguf/**", "README.md"]
