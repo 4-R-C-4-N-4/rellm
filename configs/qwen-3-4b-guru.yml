@@ -1,0 +1,54 @@
+# qwen-3-4b-guru — fast production tagger for the guru pipeline.
+# Exploratory build (no hard gates). See docs/qwen-3-4b-guru-build-spec.md.
+#
+# Same distillation recipe as rellm's 7B (r=32 all-linear, 3 epochs, b1×ga16,
+# paged-adamw-8bit, lr 1.5e-4 cosine) — the deltas are the base and the context:
+#   - base: Qwen3-4B-Instruct-2507 (4B, faster) instead of Qwen2.5-7B
+#   - chat_template: qwen3-instruct (Qwen3 ChatML — NOT qwen-2.5; the #1 silent
+#     fine-tune failure if mismatched. Verified via pre-flight tokenization.)
+#   - max_seq_length 6144: 8192 OOM'd at step 0 on the 3090 — the loss logits
+#     are seq_len * 151936 vocab * 4B (~5 GiB at 8192), and that plus 8192-long
+#     activations exceeded 24 GB. 6144 drops the logit tensor to ~3.8 GiB and
+#     fits with margin; still well above the 7B's 5632, so it recovers most of
+#     the long examples the 7B had to drop. (A bigger card would allow 8192.)
+
+base_model: unsloth/Qwen3-4B-Instruct-2507-bnb-4bit
+chat_template: qwen3-instruct
+max_seq_length: 6144
+
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+batch_size: 1
+grad_accum: 16       # effective batch = 16
+epochs: 3
+learning_rate: 1.5e-4
+warmup_ratio: 0.03
+lr_scheduler: cosine
+optim: paged_adamw_8bit
+
+logging_steps: 10
+eval_steps: 100
+save_steps: 100
+save_total_limit: 3
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+packing: false
+report_to: none      # exploratory; W&B deferred
+seed: 42
+
+# Publish target (its own HF repo + tag namespace — separate from rellm's 7B).
+publish:
+  hf_repo: 4rc4n4/qwen-3-4b-guru
+  model_card: docs/qwen-3-4b-guru-card.md
+  artifacts: ["adapter/**", "merged/**", "gguf/**", "README.md", "taxonomy.toml"]

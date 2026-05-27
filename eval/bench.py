@@ -96,10 +96,14 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0, help="cap chunks for smoke test")
     ap.add_argument("--max-tokens", type=int, default=4096)
     ap.add_argument("--timeout", type=float, default=180.0)
+    ap.add_argument("--taxonomy", type=Path, default=None,
+                    help="taxonomy.toml to score against; else cfg.guru.taxonomy. "
+                         "Use the snapshot a model was trained on if the live "
+                         "taxonomy has since changed.")
     args = ap.parse_args()
 
     cfg = load_config()
-    concepts = load_taxonomy(cfg.guru.taxonomy)
+    concepts = load_taxonomy(args.taxonomy or cfg.guru.taxonomy)
     taxonomy_ids = {c.id for c in concepts}
 
     splits = json.loads((args.export_dir / "splits.json").read_text())["splits"]

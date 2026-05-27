@@ -80,6 +80,7 @@ def main() -> None:
 
     from huggingface_hub import HfApi
     api = HfApi()
+    api.create_repo(repo_id=repo, repo_type="model", exist_ok=True)  # no-op if it exists
     print(f"→ uploading to {repo} …")
     info = api.upload_folder(
         repo_id=repo,
