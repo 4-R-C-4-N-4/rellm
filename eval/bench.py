@@ -36,6 +36,7 @@ from rellm.config import load as load_config
 from rellm.db import open_db
 from rellm.extract import iter_teacher_chunks
 from rellm.formats import SYSTEM_PROMPT, build_user_prompt, parse_model_tags
+from rellm.grammar import build_grammar
 from rellm.taxonomy import load_taxonomy
 
 
@@ -46,15 +47,19 @@ def _endpoint(s: str) -> tuple[str, str]:
     return name.strip(), url.rstrip("/")
 
 
-def _call(url: str, system: str, user: str, max_tokens: int, timeout: float) -> tuple[str, float]:
-    body = json.dumps({
+def _call(url: str, system: str, user: str, max_tokens: int, timeout: float,
+          grammar: str | None = None) -> tuple[str, float]:
+    payload: dict = {
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
         "temperature": 0.0,
         "max_tokens": max_tokens,
-    }).encode()
+    }
+    if grammar:
+        payload["grammar"] = grammar  # llama.cpp GBNF — constrains output structure
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(
         f"{url}/v1/chat/completions",
         data=body,
@@ -100,11 +105,19 @@ def main() -> None:
                     help="taxonomy.toml to score against; else cfg.guru.taxonomy. "
                          "Use the snapshot a model was trained on if the live "
                          "taxonomy has since changed.")
+    ap.add_argument("--grammar", choices=["off", "open", "strict"], default="off",
+                    help="GBNF-constrain output. open=any snake_case id (keeps "
+                         "new-concept discovery); strict=only taxonomy ids; "
+                         "off=unconstrained (default).")
     args = ap.parse_args()
 
     cfg = load_config()
     concepts = load_taxonomy(args.taxonomy or cfg.guru.taxonomy)
     taxonomy_ids = {c.id for c in concepts}
+    grammar = None
+    if args.grammar != "off":
+        grammar = build_grammar(concepts, allow_new=(args.grammar == "open"))
+        print(f"grammar: {args.grammar} ({len(grammar)} chars)", file=sys.stderr)
 
     splits = json.loads((args.export_dir / "splits.json").read_text())["splits"]
 
@@ -153,7 +166,8 @@ def main() -> None:
             for name, url in args.endpoint:
                 try:
                     raw, dt = _call(url, SYSTEM_PROMPT, user_prompt,
-                                    max_tokens=args.max_tokens, timeout=args.timeout)
+                                    max_tokens=args.max_tokens, timeout=args.timeout,
+                                    grammar=grammar)
                 except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as e:
                     print(f"  [{i}/{len(chunks)}] {name} {ch.chunk_id}: ERROR {e}",
                           file=sys.stderr)

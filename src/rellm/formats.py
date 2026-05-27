@@ -55,12 +55,57 @@ Return a JSON array of objects for every concept with score >= 1:
 Return [] if nothing scores >= 1. Output only the JSON array. No preamble, no explanation, no markdown fences. Start your response with [ and end with ]. Return [] if nothing scores >= 1."""
 
 
+def _complete_objects(raw: str) -> list[str]:
+    """Return the complete top-level ``{...}`` JSON object substrings in ``raw``,
+    ignoring braces inside string literals. A truncated trailing object (cut off
+    mid-generation by max_tokens) is simply not returned."""
+    objs: list[str] = []
+    depth = 0
+    start: int | None = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(raw):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start is not None:
+                objs.append(raw[start : i + 1])
+                start = None
+    return objs
+
+
+def _scores_from_items(items: list) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for item in items:
+        if isinstance(item, dict) and "concept_id" in item:
+            try:
+                out[str(item["concept_id"])] = int(item.get("score", 0))
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def parse_model_tags(raw: str) -> tuple[bool, dict[str, int]]:
     """Parse a model's JSON-array response into (parse_ok, {concept_id: score}).
 
     Tolerates markdown fences and a few common wrapper shapes ({"tags": [...]}).
-    Returns (False, {}) when the body fails to parse as JSON at all. An empty
-    list parses as (True, {}).
+    If the body fails to parse as JSON (typically a response truncated by
+    max_tokens mid-array), salvages the complete objects emitted before the cut —
+    returns parse_ok=True when at least one usable tag is recovered, else
+    (False, {}). An empty list parses as (True, {}).
     """
     raw = raw.strip()
     if raw.startswith("```"):
@@ -70,21 +115,26 @@ def parse_model_tags(raw: str) -> tuple[bool, dict[str, int]]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return False, {}
+        # Truncated / over-run array: recover the complete objects before the cut.
+        salvaged = _scores_from_items(
+            [obj for s in _complete_objects(raw) if (obj := _try_load(s)) is not None]
+        )
+        return (bool(salvaged), salvaged)
     if isinstance(data, dict):
         for k in ("tags", "results", "concepts", "items"):
             if k in data:
                 data = data[k]
                 break
-    out: dict[str, int] = {}
     if isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict) and "concept_id" in item:
-                try:
-                    out[str(item["concept_id"])] = int(item.get("score", 0))
-                except (TypeError, ValueError):
-                    pass
-    return True, out
+        return True, _scores_from_items(data)
+    return True, {}
+
+
+def _try_load(s: str):
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return None
 
 
 def serialize_teacher_tags(tags: list[TeacherTag]) -> str:

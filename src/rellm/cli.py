@@ -22,6 +22,7 @@ from rellm.formats import (
     parse_model_tags,
     write_sft_jsonl,
 )
+from rellm.grammar import build_grammar
 from rellm.splits import write_split_manifest
 from rellm.taxonomy import load_taxonomy
 
@@ -187,18 +188,47 @@ def splits(
     typer.echo(json.dumps(manifest["counts"], indent=2))
 
 
+@app.command()
+def grammar(
+    mode: str = typer.Option("open", help="open (snake_case ids, keeps new-concept discovery) or strict (taxonomy ids only)"),
+    out: Path = typer.Option(None, help="Output .gbnf path; default stdout"),
+    taxonomy: Path = typer.Option(None, help="taxonomy.toml; else cfg.guru.taxonomy"),
+):
+    """Emit a GBNF grammar from the taxonomy for constrained tagging.
+
+    The grammar forces valid tagging-JSON output structure. Regenerate it
+    whenever the taxonomy changes — it's derived data, not weights, so it costs
+    nothing. Feed it to a llama.cpp server via the `grammar` request field
+    (e.g. `rellm tag --grammar open`, or guru's caller).
+    """
+    if mode not in ("open", "strict"):
+        raise typer.BadParameter("mode must be open or strict")
+    cfg = load_config()
+    concepts = load_taxonomy(taxonomy or cfg.guru.taxonomy)
+    gbnf = build_grammar(concepts, allow_new=(mode == "open"))
+    if out:
+        out.write_text(gbnf)
+        typer.echo(f"wrote {mode} grammar ({len(concepts)} concepts) to {out}", err=True)
+    else:
+        typer.echo(gbnf)
+
+
 def _call_server(
     endpoint: str, system: str, user: str,
     temperature: float, max_tokens: int, timeout: float,
+    grammar: str | None = None,
 ) -> str:
-    body = json.dumps({
+    payload: dict = {
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
         "temperature": temperature,
         "max_tokens": max_tokens,
-    }).encode()
+    }
+    if grammar:
+        payload["grammar"] = grammar  # llama.cpp GBNF — constrains output structure
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(
         f"{endpoint.rstrip('/')}/v1/chat/completions",
         data=body,
@@ -234,8 +264,17 @@ def tag(
         help="Tradition id when using --text-file",
     ),
     temperature: float = typer.Option(0.0),
-    max_tokens: int = typer.Option(4096),
+    max_tokens: int = typer.Option(6144, help="6144 is the latency/truncation sweet spot for the 4B"),
     timeout: float = typer.Option(180.0),
+    taxonomy: Path = typer.Option(
+        None, "--taxonomy",
+        help="taxonomy.toml to tag against; else cfg.guru.taxonomy",
+    ),
+    grammar: str = typer.Option(
+        "off", "--grammar",
+        help="GBNF-constrain output: open (snake_case ids, keeps discovery), "
+             "strict (taxonomy ids only), or off",
+    ),
 ):
     """Tag chunks via a running llama-server.
 
@@ -248,8 +287,13 @@ def tag(
     Ad-hoc mode (--text-file): tags one passage from a file, using --citation
     and --tradition you provide.
     """
+    if grammar not in ("off", "open", "strict"):
+        raise typer.BadParameter("grammar must be off, open, or strict")
     cfg = load_config()
-    concepts = load_taxonomy(cfg.guru.taxonomy)
+    concepts = load_taxonomy(taxonomy or cfg.guru.taxonomy)
+    grammar_str = (
+        build_grammar(concepts, allow_new=(grammar == "open")) if grammar != "off" else None
+    )
     sink = out.open("w") if out else sys.stdout
 
     def emit(record: dict) -> None:
@@ -262,7 +306,7 @@ def tag(
         raw, err = "", None
         try:
             raw = _call_server(endpoint, SYSTEM_PROMPT, user,
-                               temperature, max_tokens, timeout)
+                               temperature, max_tokens, timeout, grammar=grammar_str)
         except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as e:
             err = f"{type(e).__name__}: {e}"
         dt = time.monotonic() - t0
