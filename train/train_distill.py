@@ -130,7 +130,7 @@ def _train(args: argparse.Namespace) -> None:
             report_to=cfg.get("report_to", "none"),
         ),
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
 
     adapter_dir = output_dir / "adapter"
     model.save_pretrained(adapter_dir)
@@ -143,7 +143,22 @@ def main() -> None:
     ap.add_argument("--export-dir", required=True)
     ap.add_argument("--config", required=True)
     ap.add_argument("--output-dir", required=True)
-    _train(ap.parse_args())
+    ap.add_argument(
+        "--resume-from-checkpoint", default=None,
+        help="checkpoint dir to resume from (optimizer/scheduler/RNG state included), "
+             "or 'auto' to pick the latest checkpoint-* under --output-dir",
+    )
+    args = ap.parse_args()
+    if args.resume_from_checkpoint == "auto":
+        cands = sorted(
+            Path(args.output_dir).glob("checkpoint-*"),
+            key=lambda p: int(p.name.split("-")[-1]),
+        )
+        if not cands:
+            raise SystemExit(f"--resume-from-checkpoint auto: no checkpoint-* found under {args.output_dir}")
+        args.resume_from_checkpoint = str(cands[-1])
+        print(f"resuming from {args.resume_from_checkpoint}")
+    _train(args)
 
 
 if __name__ == "__main__":
