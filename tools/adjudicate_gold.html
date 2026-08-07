@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gold-set adjudication</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+<style>
+  :root {
+    --bg: #F5F4EF; --surface: #FFFFFF; --surface2: #ECEBE4;
+    --ink: #23272B; --muted: #6B7076; --line: #D8D6CE;
+    --accent: #3D4E7C; --accent-ink: #FFFFFF;
+    --lo: #A64B2E; --mid: #9A7B1F; --hi: #2F7D5B; --rej: #6B7076;
+    --lo-soft: #F3E4DC; --mid-soft: #F2ECD9; --hi-soft: #E2EFE8;
+    --warn-soft: #F2ECD9; --warn-ink: #7A6320;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171B; --surface: #1E2126; --surface2: #262A31;
+      --ink: #E7E5DF; --muted: #9BA0A8; --line: #363B44;
+      --accent: #8FA1D4; --accent-ink: #15171B;
+      --lo: #E08A63; --mid: #D8C270; --hi: #57B287; --rej: #9BA0A8;
+      --lo-soft: #3A2A21; --mid-soft: #33301F; --hi-soft: #22352C;
+      --warn-soft: #33301F; --warn-ink: #D8C270;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.55;
+    padding-bottom: calc(118px + env(safe-area-inset-bottom));
+  }
+  .serif { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; }
+
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    padding: 10px 14px 8px;
+  }
+  .hrow { display: flex; align-items: center; gap: 10px; }
+  .htitle { font-weight: 650; font-size: 15px; letter-spacing: .01em; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hcount { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; }
+  .hbtn {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 8px; padding: 6px 11px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .hbtn[data-on="1"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .pbar { height: 3px; background: var(--surface2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .pfill { height: 100%; background: var(--accent); width: 0%; transition: width .25s ease; }
+  @media (prefers-reduced-motion: reduce) { .pfill { transition: none; } }
+  .sync { font-size: 11px; color: var(--muted); }
+  .sync.err { color: var(--lo); font-weight: 700; }
+
+  main { max-width: 680px; margin: 0 auto; padding: 14px; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .badge {
+    font-size: 11.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 99px; background: var(--surface2); color: var(--muted);
+  }
+  .badge.kind-h { background: var(--hi-soft); color: var(--hi); }
+  .badge.kind-f { background: var(--lo-soft); color: var(--lo); }
+  .badge.bl { background: var(--warn-soft); color: var(--warn-ink); }
+
+  .pair {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: start;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .side .trad { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); }
+  .side .conc { font-size: 13px; color: var(--muted); margin: 2px 0 4px; word-break: break-word; }
+  .side .term { font-size: 15.5px; line-height: 1.35; }
+  .side .n { font-size: 12px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .link { align-self: center; color: var(--muted); font-size: 18px; }
+
+  .flag {
+    background: var(--warn-soft); color: var(--warn-ink);
+    border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 12px;
+  }
+  .synced { font-size: 12.5px; font-style: italic; }
+
+  .claim { font-size: 17px; line-height: 1.5; font-weight: 500; margin: 0 0 10px; text-wrap: balance; }
+  .rationale { color: var(--ink); font-size: 15px; margin: 0 0 14px; }
+  details.block summary {
+    cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); padding: 6px 0; user-select: none;
+  }
+  details.block { border-top: 1px solid var(--line); }
+  blockquote {
+    margin: 8px 0 4px; padding: 10px 12px;
+    background: var(--surface); border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
+    font-size: 15.5px; line-height: 1.6;
+  }
+  .src { display: block; font-family: -apple-system, system-ui, sans-serif; font-size: 11.5px; color: var(--muted); margin-top: 6px; word-break: break-all; }
+  .cites { margin: 8px 0 14px; padding-left: 18px; }
+  .cites li { font-size: 14px; margin-bottom: 8px; }
+
+  .anchors { margin: 14px 0 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
+  .anchors .arow { display: flex; gap: 9px; font-size: 13.5px; margin: 5px 0; }
+  .anchors .anum { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 14px; }
+  .a0 .anum, .a1 .anum { color: var(--lo); }
+  .a2 .anum { color: var(--mid); }
+  .a3 .anum, .a4 .anum { color: var(--hi); }
+
+  .notewrap { margin: 12px 0 6px; }
+  .notewrap textarea {
+    width: 100%; min-height: 64px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--ink); padding: 10px; font: inherit; font-size: 14.5px;
+  }
+  .notewrap label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 5px; }
+  .rejbtn {
+    margin-top: 10px; width: 100%; padding: 10px; border-radius: 10px; cursor: pointer;
+    border: 1px dashed var(--line); background: none; color: var(--muted); font-size: 13.5px; font-weight: 600;
+  }
+  .rejbtn[data-on="1"] { border-style: solid; border-color: var(--rej); background: var(--surface2); color: var(--ink); }
+
+  nav.vbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--bg); border-top: 1px solid var(--line);
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  }
+  .vrow { display: grid; grid-template-columns: 40px repeat(5, 1fr) 40px; gap: 7px; max-width: 680px; margin: 0 auto; }
+  .vbtn {
+    border: 1.5px solid var(--line); border-radius: 12px; background: var(--surface);
+    color: var(--ink); font-weight: 700; padding: 8px 2px; cursor: pointer; min-height: 52px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  }
+  .vbtn .rn { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .vbtn .rl { font-size: 9.5px; font-weight: 650; letter-spacing: .02em; color: var(--muted); text-transform: uppercase; }
+  .vbtn.r0, .vbtn.r1 { border-color: var(--lo); } .vbtn.r0 .rn, .vbtn.r1 .rn { color: var(--lo); }
+  .vbtn.r2 { border-color: var(--mid); } .vbtn.r2 .rn { color: var(--mid); }
+  .vbtn.r3, .vbtn.r4 { border-color: var(--hi); } .vbtn.r3 .rn, .vbtn.r4 .rn { color: var(--hi); }
+  .vbtn.r0[data-on="1"], .vbtn.r1[data-on="1"] { background: var(--lo); }
+  .vbtn.r2[data-on="1"] { background: var(--mid); }
+  .vbtn.r3[data-on="1"], .vbtn.r4[data-on="1"] { background: var(--hi); }
+  .vbtn[data-on="1"] .rn, .vbtn[data-on="1"] .rl { color: #fff; }
+  .legendline { max-width: 680px; margin: 6px auto 0; font-size: 10.5px; color: var(--muted); text-align: center; letter-spacing: .01em; }
+  .navb { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font-size: 17px; cursor: pointer; }
+  button:focus-visible, textarea:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
+  .cell {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+    padding: 10px; cursor: pointer; text-align: left; color: var(--ink); font: inherit;
+  }
+  .cell .cid { font-weight: 700; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .cell .cmini { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+  .rchip { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; border-radius: 99px; padding: 1px 7px; background: var(--surface2); color: var(--muted); }
+  .rchip.lo { background: var(--lo-soft); color: var(--lo); }
+  .rchip.mid { background: var(--mid-soft); color: var(--mid); }
+  .rchip.hi { background: var(--hi-soft); color: var(--hi); }
+  .lanehead { grid-column: 1 / -1; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; }
+
+  .xcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .xnum { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .xlab { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .xrow { display: flex; gap: 16px; flex-wrap: wrap; }
+  .xbtn {
+    width: 100%; padding: 13px; border-radius: 12px; border: 1px solid var(--line); cursor: pointer;
+    background: var(--surface); color: var(--ink); font-weight: 700; font-size: 15px; margin-top: 8px;
+  }
+  .dis { font-size: 13.5px; margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div class="htitle">Gold-set adjudication</div>
+    <span class="sync" id="sync"></span>
+    <div class="hcount" id="count"></div>
+    <button class="hbtn" id="bIndex">Index</button>
+    <button class="hbtn" id="bStatus">Status</button>
+  </div>
+  <div class="pbar"><div class="pfill" id="pfill"></div></div>
+</header>
+
+<main id="view"></main>
+
+<nav class="vbar" id="vbar">
+  <div class="vrow">
+    <button class="navb" id="bPrev" aria-label="Previous">‹</button>
+    <button class="vbtn r0" data-r="0" title="Unrelated — even the surface link is spurious"><span class="rn">0</span><span class="rl">unrelated</span></button>
+    <button class="vbtn r1" data-r="1" title="Surface only — shared word/image, the moves diverge"><span class="rn">1</span><span class="rl">surface</span></button>
+    <button class="vbtn r2" data-r="2" title="Family resemblance — same genus, different function/frame"><span class="rn">2</span><span class="rl">family</span></button>
+    <button class="vbtn r3" data-r="3" title="Strong correspondence — same move, frame differences secondary"><span class="rn">3</span><span class="rl">strong</span></button>
+    <button class="vbtn r4" data-r="4" title="Same move — functionally identical or lineage-connected"><span class="rn">4</span><span class="rl">same move</span></button>
+    <button class="navb" id="bNext" aria-label="Next">›</button>
+  </div>
+  <div class="legendline">how deep does the correspondence go? · details in the anchor card above the note</div>
+</nav>
+
+<script>
+const DATA = /*__DATA__*/[];
+const TWIN = {'B-04':'D-04','D-04':'B-04','C-07':'D-05','D-05':'C-07','B-06':'D-09','D-09':'B-06'};
+const TWINLABEL = {'B-04':'DUP-1','D-04':'DUP-1','C-07':'DUP-2','D-05':'DUP-2','B-06':'CONFLICT-1','D-09':'CONFLICT-1'};
+const LANES = {A:'Hellenic-esoteric', B:'East–West', C:'Ancient / mythic', D:'False-friend specialist'};
+const ANCHORS = [
+  ['0','Unrelated — even the surface link is spurious; the pairing itself is a mistake.'],
+  ['1','Surface only — shared word, image, or deity-name; the conceptual moves diverge. The textbook false friend.'],
+  ['2','Family resemblance — same genus of practice or idea (“they’re all meditation”), but different function, telos, or metaphysical frame.'],
+  ['3','Strong correspondence — the same conceptual move; frame differences are real but secondary.'],
+  ['4','Same move — functionally identical, or lineage-connected transmission of the concept.']
+];
+
+let S = { verdicts:{}, cur:0, screen:'judge' };
+
+const $ = id => document.getElementById(id);
+const view = $('view');
+const isJudged = id => { const v = S.verdicts[id]; return v && 'verdict' in v && v.verdict !== null && v.verdict !== undefined; };
+const judgedCount = () => DATA.filter(r => isJudged(r.id)).length;
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+let pending = 0;
+function syncUi(err){
+  const el = $('sync');
+  if (err){ el.textContent = 'offline — retap when back'; el.className = 'sync err'; }
+  else if (pending > 0){ el.textContent = 'saving…'; el.className = 'sync'; }
+  else { el.textContent = 'saved'; el.className = 'sync'; }
+}
+async function push(id){
+  pending++; syncUi();
+  try {
+    const r = await fetch('/api/verdict', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(Object.assign({id: id}, S.verdicts[id]))
+    });
+    if (!r.ok) throw new Error(r.status);
+    pending--; syncUi();
+  } catch(e){ pending--; syncUi(true); }
+}
+
+function header(){
+  const n = judgedCount();
+  $('count').textContent = n + ' / ' + DATA.length;
+  $('pfill').style.width = (100*n/DATA.length) + '%';
+  $('bIndex').dataset.on = S.screen==='index' ? '1':'0';
+  $('bStatus').dataset.on = S.screen==='status' ? '1':'0';
+  $('vbar').style.display = S.screen==='judge' ? '' : 'none';
+}
+
+function side(x, n){
+  return '<div class="side"><div class="trad">'+esc(x.tradition)+'</div>' +
+    '<div class="conc">'+esc(x.concept.replace('concept.',''))+'</div>' +
+    '<div class="term serif">'+esc(x.term)+'</div>' +
+    '<div class="n">n = '+n+'</div></div>';
+}
+
+function renderJudge(){
+  const r = DATA[S.cur];
+  const v = S.verdicts[r.id] || {};
+  const twin = TWIN[r.id];
+  let flag = '';
+  if (twin){
+    const lbl = TWINLABEL[r.id];
+    const conflict = lbl.indexOf('CONFLICT') === 0;
+    flag = '<div class="flag"><b>'+lbl+'</b> — same pair as <b>'+twin+'</b>' +
+      (conflict ? '; the two proposer lanes <b>disagreed</b> (one leaned homology, one false friend).' : '.') +
+      ' Your rating here is copied to '+twin+' automatically (you can still change it there).' +
+      (v.synced ? ' <span class="synced">This one was auto-synced from '+twin+'.</span>' : '') + '</div>';
+  }
+  const ev = r.primary_evidence.map(e =>
+    '<blockquote class="serif">'+esc(e.quote)+'<span class="src">'+esc(e.source.replace('/home/ivy/Work/guru/corpus/',''))+'</span></blockquote>').join('');
+  const cites = r.secondary_citations.map(c => '<li>'+esc(c)+'</li>').join('');
+  const anchors = ANCHORS.map((a,i) => '<div class="arow a'+i+'"><span class="anum">'+a[0]+'</span><span>'+a[1]+'</span></div>').join('');
+  view.innerHTML =
+    '<div class="badges">' +
+      '<span class="badge">'+r.id+' · lane '+r.id[0]+'</span>' +
+      '<span class="badge '+(r.kind_proposed==='homology'?'kind-h':'kind-f')+'">proposer leaned '+(r.kind_proposed==='homology'?'homology':'false friend')+'</span>' +
+      (r.difficulty==='borderline' ? '<span class="badge bl">borderline</span>' : '<span class="badge">easy</span>') +
+    '</div>' + flag +
+    '<div class="pair">'+side(r.a, r.cell_n.a)+'<div class="link">↔</div>'+side(r.b, r.cell_n.b)+'</div>' +
+    '<p class="claim serif">'+esc(r.claim)+'</p>' +
+    '<p class="rationale">'+esc(r.rationale)+'</p>' +
+    '<details class="block" open><summary>Primary evidence ('+r.primary_evidence.length+')</summary>'+ev+'</details>' +
+    '<details class="block"><summary>Secondary citations ('+r.secondary_citations.length+')</summary><ul class="cites">'+cites+'</ul></details>' +
+    '<div class="anchors">'+anchors+'</div>' +
+    '<div class="notewrap"><label for="note">Note (optional — lands in verdict_note)</label>' +
+    '<textarea id="note" placeholder="e.g. “2 at the level of practice, would be 1 on telos alone”">'+esc(v.note||'')+'</textarea>' +
+    '<button class="rejbtn" id="bRej" data-on="'+(v.verdict==='rejected'?'1':'0')+'">✗ Reject as test case — bad evidence / unusable pairing (not a rating)</button></div>';
+  let noteTimer = null;
+  $('note').addEventListener('input', e => {
+    const cur = S.verdicts[r.id] || (S.verdicts[r.id] = {});
+    cur.note = e.target.value; cur.synced = false;
+    clearTimeout(noteTimer); noteTimer = setTimeout(() => push(r.id), 600);
+  });
+  $('bRej').addEventListener('click', () => setRating('rejected'));
+  document.querySelectorAll('.vbtn').forEach(b => {
+    b.dataset.on = (String(v.verdict) === b.dataset.r) ? '1' : '0';
+  });
+  header();
+  window.scrollTo(0,0);
+}
+
+function setRating(val){
+  const r = DATA[S.cur];
+  const cur = S.verdicts[r.id] || (S.verdicts[r.id] = {});
+  cur.verdict = val === 'rejected' ? 'rejected' : Number(val);
+  cur.synced = false;
+  push(r.id);
+  const twin = TWIN[r.id];
+  if (twin){
+    const tv = S.verdicts[twin] || (S.verdicts[twin] = {});
+    if (!isJudged(twin) || tv.synced){ tv.verdict = cur.verdict; tv.synced = true; push(twin); }
+  }
+  const nxt = nextUnjudged(S.cur);
+  if (nxt !== -1){ S.cur = nxt; renderJudge(); }
+  else { S.screen = 'status'; render(); }
+}
+function nextUnjudged(from){
+  for (let d=1; d<=DATA.length; d++){
+    const i = (from + d) % DATA.length;
+    if (!isJudged(DATA[i].id)) return i;
+  }
+  return -1;
+}
+
+function chip(v){
+  if (v === undefined || v === null) return '<span class="rchip">·</span>';
+  if (v === 'rejected') return '<span class="rchip">✗</span>';
+  const cls = v <= 1 ? 'lo' : v === 2 ? 'mid' : 'hi';
+  return '<span class="rchip '+cls+'">'+v+'</span>';
+}
+
+function renderIndex(){
+  let html = '<div class="grid">';
+  let lane = '';
+  DATA.forEach((r,i) => {
+    if (r.id[0] !== lane){ lane = r.id[0]; html += '<div class="lanehead">Lane '+lane+' — '+LANES[lane]+'</div>'; }
+    const v = (S.verdicts[r.id]||{}).verdict;
+    html += '<button class="cell" data-i="'+i+'"><span class="cid">'+r.id+' '+chip(v)+'</span>' +
+      '<span class="cmini">'+esc(r.a.tradition)+' ↔ '+esc(r.b.tradition)+'<br>'+esc(r.a.concept.replace('concept.',''))+(TWIN[r.id]?' · ⚠':'')+'</span></button>';
+  });
+  html += '</div>';
+  view.innerHTML = html;
+  view.querySelectorAll('.cell').forEach(b => b.addEventListener('click', () => {
+    S.cur = +b.dataset.i; S.screen = 'judge'; render();
+  }));
+  header();
+  window.scrollTo(0,0);
+}
+
+function renderStatus(){
+  const n = judgedCount();
+  const hist = {0:0,1:0,2:0,3:0,4:0,rejected:0};
+  const dis = [];
+  DATA.forEach(r => {
+    const v = (S.verdicts[r.id]||{}).verdict;
+    if (v === undefined || v === null) return;
+    hist[v] = (hist[v]||0) + 1;
+    if (v !== 'rejected'){
+      if (r.kind_proposed === 'false_friend' && v >= 3) dis.push(r.id+': proposer leaned false friend → you rated '+v);
+      if (r.kind_proposed === 'homology' && v <= 1) dis.push(r.id+': proposer leaned homology → you rated '+v);
+    }
+  });
+  const cols = [0,1,2,3,4].map(k =>
+    '<div><div class="xnum" style="color:'+(k<=1?'var(--lo)':k===2?'var(--mid)':'var(--hi)')+'">'+hist[k]+'</div><div class="xlab">'+k+' · '+['unrelated','surface','family','strong','same move'][k]+'</div></div>').join('');
+  view.innerHTML =
+    '<div class="xcard"><div class="xrow">' +
+      '<div><div class="xnum">'+n+'<span style="font-size:15px;color:var(--muted)"> / '+DATA.length+'</span></div><div class="xlab">judged</div></div>' +
+      cols +
+      '<div><div class="xnum" style="color:var(--rej)">'+hist.rejected+'</div><div class="xlab">rejected</div></div>' +
+    '</div></div>' +
+    (dis.length ? '<div class="xcard"><div class="xlab" style="margin-bottom:6px">You overruled the proposer ('+dis.length+')</div>' +
+      dis.map(d => '<div class="dis">'+esc(d)+'</div>').join('') + '</div>' : '') +
+    '<div class="xcard" style="font-size:14px">Ratings are the gold signal: the geometry is validated by whether cosine <i>reproduces your ordering</i> (rank correlation), plus separation between the 0–1 and 3–4 tails. Your 2s are a prediction too — a good instrument should score them in the middle. Every tap saves to <b>data/homology/gold/verdicts.json</b>; nothing to export.</div>' +
+    '<button class="xbtn" id="xBack">← Back to judging</button>';
+  $('xBack').addEventListener('click', () => { S.screen='judge'; const nx = nextUnjudged(S.cur-1); if(nx!==-1) S.cur=nx; render(); });
+  header();
+  window.scrollTo(0,0);
+}
+
+function render(){
+  if (S.screen==='index') renderIndex();
+  else if (S.screen==='status') renderStatus();
+  else renderJudge();
+}
+
+$('bIndex').addEventListener('click', () => { S.screen = S.screen==='index'?'judge':'index'; render(); });
+$('bStatus').addEventListener('click', () => { S.screen = S.screen==='status'?'judge':'status'; render(); });
+$('bPrev').addEventListener('click', () => { S.cur = (S.cur-1+DATA.length)%DATA.length; renderJudge(); });
+$('bNext').addEventListener('click', () => { S.cur = (S.cur+1)%DATA.length; renderJudge(); });
+document.querySelectorAll('.vbtn').forEach(b => b.addEventListener('click', () => setRating(b.dataset.r)));
+document.addEventListener('keydown', e => {
+  if (S.screen!=='judge' || e.target.tagName==='TEXTAREA') return;
+  if (['0','1','2','3','4'].indexOf(e.key) !== -1) setRating(e.key);
+  if (e.key==='x') setRating('rejected');
+  if (e.key==='ArrowLeft') $('bPrev').click();
+  if (e.key==='ArrowRight') $('bNext').click();
+});
+
+(async function init(){
+  try {
+    const st = await fetch('/api/state').then(r => r.json());
+    S.verdicts = st.verdicts || {};
+  } catch(e){ syncUi(true); }
+  const nx = nextUnjudged(-1);
+  S.cur = nx === -1 ? 0 : nx;
+  render();
+})();
+</script>
+</body>
+</html>

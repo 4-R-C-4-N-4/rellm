@@ -1,0 +1,353 @@
+{
+ "method": "tradition-centered concept centroids, nomic-embed-text 768d",
+ "min_n": 10,
+ "cells": 685,
+ "gold_scored": 56,
+ "gold_skipped": 0,
+ "spearman_rating_vs_cosine": 0.147,
+ "spearman_rating_vs_percentile": 0.124,
+ "tail_auc_lo01_vs_hi34": 0.606,
+ "mean_percentile": {
+  "ratings_0_1": 60.3,
+  "ratings_2": 74.9,
+  "ratings_3_4": 73.3
+ },
+ "pairs": [
+  {
+   "id": "A-01",
+   "rating": 4,
+   "cosine": 0.4376,
+   "percentile": 99.8
+  },
+  {
+   "id": "C-04",
+   "rating": 1,
+   "cosine": 0.3272,
+   "percentile": 99.6
+  },
+  {
+   "id": "A-10",
+   "rating": 1,
+   "cosine": 0.4672,
+   "percentile": 99.5
+  },
+  {
+   "id": "D-12",
+   "rating": 2,
+   "cosine": 0.2657,
+   "percentile": 97.6
+  },
+  {
+   "id": "A-15",
+   "rating": 3,
+   "cosine": 0.255,
+   "percentile": 97.5
+  },
+  {
+   "id": "C-03",
+   "rating": 3,
+   "cosine": 0.175,
+   "percentile": 95.8
+  },
+  {
+   "id": "A-02",
+   "rating": 4,
+   "cosine": 0.3032,
+   "percentile": 94.9
+  },
+  {
+   "id": "C-14",
+   "rating": 1,
+   "cosine": 0.2088,
+   "percentile": 94.2
+  },
+  {
+   "id": "A-09",
+   "rating": 1,
+   "cosine": 0.3095,
+   "percentile": 93.7
+  },
+  {
+   "id": "D-02",
+   "rating": 2,
+   "cosine": 0.1863,
+   "percentile": 93.5
+  },
+  {
+   "id": "C-01",
+   "rating": 3,
+   "cosine": 0.2721,
+   "percentile": 93.0
+  },
+  {
+   "id": "A-16",
+   "rating": 2,
+   "cosine": 0.1913,
+   "percentile": 92.1
+  },
+  {
+   "id": "C-09",
+   "rating": 4,
+   "cosine": 0.295,
+   "percentile": 92.1
+  },
+  {
+   "id": "A-05",
+   "rating": 4,
+   "cosine": 0.3323,
+   "percentile": 90.7
+  },
+  {
+   "id": "A-08",
+   "rating": 3,
+   "cosine": 0.2158,
+   "percentile": 89.9
+  },
+  {
+   "id": "A-13",
+   "rating": 3,
+   "cosine": 0.1937,
+   "percentile": 89.4
+  },
+  {
+   "id": "C-02",
+   "rating": 2,
+   "cosine": 0.1878,
+   "percentile": 89.2
+  },
+  {
+   "id": "B-12",
+   "rating": 1,
+   "cosine": 0.1982,
+   "percentile": 88.9
+  },
+  {
+   "id": "B-03",
+   "rating": 3,
+   "cosine": 0.1872,
+   "percentile": 88.2
+  },
+  {
+   "id": "C-08",
+   "rating": 2,
+   "cosine": 0.2218,
+   "percentile": 87.8
+  },
+  {
+   "id": "A-06",
+   "rating": 4,
+   "cosine": 0.2264,
+   "percentile": 87.7
+  },
+  {
+   "id": "B-02",
+   "rating": 2,
+   "cosine": 0.1474,
+   "percentile": 87.6
+  },
+  {
+   "id": "C-13",
+   "rating": 4,
+   "cosine": 0.1538,
+   "percentile": 84.6
+  },
+  {
+   "id": "B-08",
+   "rating": 3,
+   "cosine": 0.1275,
+   "percentile": 83.9
+  },
+  {
+   "id": "B-10",
+   "rating": 4,
+   "cosine": 0.1584,
+   "percentile": 83.7
+  },
+  {
+   "id": "D-01",
+   "rating": 1,
+   "cosine": 0.174,
+   "percentile": 83.1
+  },
+  {
+   "id": "C-11",
+   "rating": 4,
+   "cosine": 0.1289,
+   "percentile": 79.2
+  },
+  {
+   "id": "B-01",
+   "rating": 2,
+   "cosine": 0.1235,
+   "percentile": 76.9
+  },
+  {
+   "id": "D-06",
+   "rating": 1,
+   "cosine": 0.1131,
+   "percentile": 73.5
+  },
+  {
+   "id": "C-05",
+   "rating": 2,
+   "cosine": 0.0959,
+   "percentile": 70.1
+  },
+  {
+   "id": "A-14",
+   "rating": 3,
+   "cosine": 0.0936,
+   "percentile": 69.3
+  },
+  {
+   "id": "C-06",
+   "rating": 3,
+   "cosine": 0.1873,
+   "percentile": 69.1
+  },
+  {
+   "id": "A-11",
+   "rating": 2,
+   "cosine": 0.1488,
+   "percentile": 67.4
+  },
+  {
+   "id": "A-03",
+   "rating": 4,
+   "cosine": 0.1019,
+   "percentile": 67.3
+  },
+  {
+   "id": "C-10",
+   "rating": 2,
+   "cosine": 0.1403,
+   "percentile": 65.1
+  },
+  {
+   "id": "D-11",
+   "rating": 1,
+   "cosine": 0.0788,
+   "percentile": 63.9
+  },
+  {
+   "id": "D-08",
+   "rating": 2,
+   "cosine": 0.0717,
+   "percentile": 63.5
+  },
+  {
+   "id": "B-11",
+   "rating": 4,
+   "cosine": 0.066,
+   "percentile": 61.1
+  },
+  {
+   "id": "B-14",
+   "rating": 1,
+   "cosine": 0.0389,
+   "percentile": 60.2
+  },
+  {
+   "id": "A-12",
+   "rating": 3,
+   "cosine": 0.1112,
+   "percentile": 59.8
+  },
+  {
+   "id": "C-07",
+   "rating": 2,
+   "cosine": 0.053,
+   "percentile": 54.6
+  },
+  {
+   "id": "D-05",
+   "rating": 2,
+   "cosine": 0.053,
+   "percentile": 54.6
+  },
+  {
+   "id": "A-04",
+   "rating": 4,
+   "cosine": 0.0438,
+   "percentile": 54.0
+  },
+  {
+   "id": "D-10",
+   "rating": 1,
+   "cosine": 0.0593,
+   "percentile": 53.6
+  },
+  {
+   "id": "A-07",
+   "rating": 3,
+   "cosine": 0.0729,
+   "percentile": 51.5
+  },
+  {
+   "id": "D-07",
+   "rating": 1,
+   "cosine": 0.0477,
+   "percentile": 49.8
+  },
+  {
+   "id": "B-07",
+   "rating": 2,
+   "cosine": 0.0016,
+   "percentile": 48.9
+  },
+  {
+   "id": "B-05",
+   "rating": 3,
+   "cosine": -0.0134,
+   "percentile": 48.3
+  },
+  {
+   "id": "B-13",
+   "rating": 4,
+   "cosine": -0.0285,
+   "percentile": 38.5
+  },
+  {
+   "id": "B-04",
+   "rating": 1,
+   "cosine": -0.0204,
+   "percentile": 34.2
+  },
+  {
+   "id": "D-04",
+   "rating": 1,
+   "cosine": -0.0204,
+   "percentile": 34.2
+  },
+  {
+   "id": "C-12",
+   "rating": 0,
+   "cosine": 0.013,
+   "percentile": 33.4
+  },
+  {
+   "id": "B-06",
+   "rating": 4,
+   "cosine": -0.083,
+   "percentile": 18.6
+  },
+  {
+   "id": "D-09",
+   "rating": 4,
+   "cosine": -0.083,
+   "percentile": 18.6
+  },
+  {
+   "id": "B-09",
+   "rating": 1,
+   "cosine": -0.1986,
+   "percentile": 1.9
+  },
+  {
+   "id": "D-03",
+   "rating": 1,
+   "cosine": -0.2154,
+   "percentile": 1.5
+  }
+ ]
+}
