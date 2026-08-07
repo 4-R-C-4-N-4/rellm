@@ -131,6 +131,12 @@ def export(
     limit: int = typer.Option(0, help="Max chunks (0 = no limit)"),
     out: Path = typer.Option(None, help="Output jsonl; else data/exports/<ts>/sft.jsonl"),
     status: str = typer.Option("pending,accepted", help="Comma-separated staged_tags statuses to include"),
+    taxonomy: Path = typer.Option(
+        None, "--taxonomy",
+        help="taxonomy.toml to bake into prompts; else cfg.guru.taxonomy. "
+             "Use a pinned flat snapshot when guru's live taxonomy has "
+             "restructured (its load_taxonomy is the source of truth).",
+    ),
 ):
     """Emit SFT jsonl: (chunk + full taxonomy) → teacher JSON tags."""
     cfg = load_config()
@@ -144,7 +150,7 @@ def export(
         out.parent.mkdir(parents=True, exist_ok=True)
 
     statuses = tuple(s.strip() for s in status.split(",") if s.strip())
-    concepts = load_taxonomy(cfg.guru.taxonomy)
+    concepts = load_taxonomy(taxonomy or cfg.guru.taxonomy)
 
     with open_db(db_path) as conn:
         chunks = iter_teacher_chunks(

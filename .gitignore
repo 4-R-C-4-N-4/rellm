@@ -11,6 +11,8 @@ data/exports/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/quarantine/*.db
+data/homology/directions/
 
 # Training outputs
 out/
