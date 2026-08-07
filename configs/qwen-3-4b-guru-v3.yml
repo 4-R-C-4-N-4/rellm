@@ -1,0 +1,63 @@
+# qwen-3-4b-guru-v3 — retrain on the post-quarantine corpus, full taxonomy.
+#
+# Identical hyperparameters to v1/v2 — the v3 delta is data + context length:
+#   - taxonomy loader bug fixed (rellm was parsing families as concepts —
+#     22 pseudo-concepts with dict-valued "definitions" — after the guru
+#     taxonomy grew a domain/family/concept tier; now correctly resolves all
+#     110 leaf concepts). v3 trains on the full live taxonomy natively,
+#     unlike v1/v2 which fell back to a pinned 88-concept snapshot.
+#   - corpus cleaned: 4 quarantine batches + waves corrected ~2,600
+#     cross-tradition false-friend / blanket-tagged / lexically-keyed tags
+#     (see docs/qwen-3-4b-v2-regression-autopsy.md) before this export.
+#   - max_seq_length raised 6144 -> 9472. The 110-concept definitions block
+#     alone is ~5,939 tokens (definitions are far richer than the original
+#     terse ones); full export is 100% over 6144 (min 6273, p99 8684,
+#     max 9294 tokens). 9472 covers the observed max — zero examples dropped.
+#   - root cause of the original v1/v2 OOM ceiling: flash-attn was never
+#     actually installed in this venv (silent fallback to Xformers, which
+#     is far less memory-efficient at long context). Compiled flash-attn
+#     2.8.3.post1 from source (no prebuilt wheel for torch 2.12/cu130) —
+#     with FA2 active, 9472 trains cleanly on a single 24GB 3090, no
+#     multi-GPU needed. Smoke-tested at 8192 and 9472 across the full
+#     length range (6273-9294 tokens) before committing to the full run.
+
+base_model: unsloth/Qwen3-4B-Instruct-2507-bnb-4bit
+chat_template: qwen3-instruct
+max_seq_length: 9472
+
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+batch_size: 1
+grad_accum: 16
+epochs: 3
+learning_rate: 1.5e-4
+warmup_ratio: 0.03
+lr_scheduler: cosine
+optim: paged_adamw_8bit
+
+logging_steps: 10
+eval_steps: 100
+save_steps: 100
+save_total_limit: 3
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+packing: false
+report_to: none
+seed: 42
+
+# Publish target (separate from v1/v2; tag scheme qwen-3-4b-guru-v3).
+publish:
+  hf_repo: 4rc4n4/qwen-3-4b-guru
+  model_card: docs/qwen-3-4b-guru-card.md
+  artifacts: ["adapter/**", "merged/**", "gguf/**", "README.md", "taxonomy.toml"]

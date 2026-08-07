@@ -1,0 +1,59 @@
+# qwen-3-4b-guru-v2 — retrain on the post-pilot review corpus.
+#
+# Identical hyperparameters to v1 (configs/qwen-3-4b-guru.yml) — the v2 delta is
+# data only, so the v1→v2 comparison isolates the effect of:
+#   - +16% chunks (2808 → 3247) and +26% accepted tags (12,187 → 15,311)
+#   - 10× more human-rejected drop signal (~789 → 7,661) — the main precision lever
+#   - taxonomy expanded 88 → 102 (the model trains on the wider concept set
+#     natively rather than reading definitions cold from the prompt)
+#
+# Held-out parity: 289 of v1's 293 test chunks land in v2 test again
+# (deterministic chunk_id hash; 4 dropped because all their tags got rejected).
+
+base_model: unsloth/Qwen3-4B-Instruct-2507-bnb-4bit
+chat_template: qwen3-instruct
+max_seq_length: 6144     # Same as v1. Tried the 102-concept prompt at 8192/7168/
+                         # 6656 — all OOM'd on the 24 GB card. Pivoted to v1's
+                         # 88-concept taxonomy (data/exports/2026-05-26T13-03-07Z/
+                         # taxonomy.toml) so v2 is a *data-only* upgrade over v1:
+                         # same prompt shape, more chunks (3247 vs 2808), 10x
+                         # rejected drop signal, +26% accepted positives. The
+                         # 14 new taxonomy concepts won't be natively learned —
+                         # same situation v1 was in.
+
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+
+batch_size: 1
+grad_accum: 16
+epochs: 3
+learning_rate: 1.5e-4
+warmup_ratio: 0.03
+lr_scheduler: cosine
+optim: paged_adamw_8bit
+
+logging_steps: 10
+eval_steps: 100
+save_steps: 100
+save_total_limit: 3
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+packing: false
+report_to: none
+seed: 42
+
+# Publish target (separate from v1; tag scheme qwen-3-4b-guru-v2).
+publish:
+  hf_repo: 4rc4n4/qwen-3-4b-guru
+  model_card: docs/qwen-3-4b-guru-card.md
+  artifacts: ["adapter/**", "merged/**", "gguf/**", "README.md", "taxonomy.toml"]
