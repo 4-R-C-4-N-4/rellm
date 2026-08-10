@@ -11,6 +11,70 @@ work it unblocks, sequenced by dependency rather than by importance.
 
 ---
 
+## The export boundary — read this before touching anything
+
+sqlite is the workbench. **The deliverable is the Postgres staging DB**, loaded
+from `export/guru-corpus.sql.gz` by `scripts/export.py`. Every change below is
+graded against that boundary first.
+
+What actually crosses it:
+
+| sqlite | crosses? | how |
+|---|---|---|
+| `edges` (live) | **yes** | `load_edges()` — `SELECT source_id, target_id, type, tier, justification FROM edges`, unfiltered |
+| `staged_edges` | **no** | never read by `export.py` |
+| `staged_tags`, `review_actions`, `tagging_progress` | **no** | never read |
+| chunks | yes, but **from corpus TOMLs on disk** (`CORPUS_DIR.rglob("chunks/*.toml")`), not from `nodes` |
+
+**This is the load-bearing fact for the whole plan: `staged_edges` is a
+workbench table that never leaves sqlite.** The review gate — `promote_to_live`
+in `review_edges.py` — is the only path into `edges`, and `edges` is the only
+edge source the export sees. So Phase 0 and Phase 1 cannot affect staging at
+all, and only Phase 2 (indirectly) and Phase 3.1 (directly) touch it.
+
+### Constraints the plan must respect
+
+1. **No Postgres schema changes.** `SCHEMA_VERSION = 4` is pinned, and
+   `export.py` states guru-web's `EXPECTED_SCHEMA_VERSION` must advance in the
+   same deploy. Nothing in this roadmap needs a DDL change — keep it that way,
+   because the moment it does, this stops being a guru-only change.
+2. **The load is atomic** — `corpus_new` built, validated inline, then
+   `ALTER SCHEMA … RENAME` swapped. A validation failure rolls the whole thing
+   back, so a bad export is a total outage of the corpus refresh, not a partial
+   one.
+3. **`edges` PK is `(source, target, edge_type)`.** Duplicate emission fails the
+   load.
+
+### Pre-existing bug this plan would have made worse
+
+`load_chunks()` emits chunks from corpus TOMLs, but `load_edges()` emits *all*
+of `edges` with no endpoint check, and `emit_validation()` checks
+`summary_nodes` child ids against chunks — **but never edge endpoints**.
+
+Measured on the snapshot:
+
+- **929 live edges reference a chunk endpoint with no corpus file** (63 of them
+  cross-tradition PARALLELS/CONTRASTS).
+- They export as dangling references, the load succeeds, and guru-web fails to
+  resolve them at render time.
+
+This is broken today, independent of anything here. But Phase 2 retires the
+similarity floor and widens retrieval, which reaches more of the 273 file-less
+chunk ids — so it would grow the dangling set. **Fixing it is now Phase 0.4,
+ahead of any retrieval change.**
+
+### A free win, no schema change
+
+`corpus-schema.sql` already has `weight REAL` on `edges`, documented as "an
+optional similarity / relevance score attached by the pipeline for downstream
+ranking." `load_edges()` hardcodes `"weight": None` — it has always been NULL.
+
+The reranker score is exactly that value. Populating it needs **no DDL change
+and no `SCHEMA_VERSION` bump**, so no lockstep guru-web deploy. It gives the
+web app a ranking signal for free (Phase 2.4).
+
+---
+
 ## The shape of it
 
 ```
@@ -30,7 +94,7 @@ neither blocks the other. Phase 2 needs both.
 
 ---
 
-## Phase 0 — stop the data loss (guru, ~4h, no model required)
+## Phase 0 — stop the data loss (guru, ~5h, no model required)
 
 **Do this first, and do it before the next sweep runs.** Every one of these is
 losing information right now, and the loss is not recoverable after the fact.
@@ -84,8 +148,27 @@ via a wrapper silently shrinks each slot's context — at `PARALLEL=8` that is
 4096/slot, which truncates a thinking model mid-JSON. One word, and it will
 bite the Phase 1 probe runs otherwise.
 
+### 0.4 Stop exporting dangling edges — `export.py:load_edges`
+
+929 live edges point at a chunk with no corpus file and are exported as
+dangling references today, because `load_edges()` filters nothing and the
+inline validation never checks edge endpoints.
+
+Filter endpoints against the emitted chunk set, and add an edge-endpoint check
+to `emit_validation()` so a regression fails the load loudly instead of
+degrading the web app silently.
+
+> Sequence this **before** Phase 2. Retiring the similarity floor reaches more
+> of the 273 file-less chunk ids, so fixing the filter afterwards means
+> shipping a known-worse export in between.
+
 **Phase 0 exit:** a sweep can run without losing negatives, provenance, or
-progress. Nothing about retrieval has changed yet.
+progress, and the export stops emitting dangling edges.
+
+**Export impact of Phase 0: none.** Every change is confined to `staged_edges`,
+a new `edge_progress` table, and the export's own endpoint filter. `edges` is
+untouched, so staging sees no behavioural change other than 929 broken
+references disappearing.
 
 ---
 
@@ -138,15 +221,37 @@ The reranker replaces the floor as the filter. Retiring the floor without
 putting something in its place is precisely what sank `hybrid` and `worklevel`
 (0.32 and 0.30 against ~0.70).
 
+**4. Populate `edges.weight` with the reranker score** on promotion. The column
+exists, is already exported, and has always been NULL. No DDL change, no
+`SCHEMA_VERSION` bump, no guru-web deploy required — it just starts carrying a
+ranking signal.
+
 **Before the first wide sweep:** clear or triage the 2,058 pending rows. Adding
 a large candidate batch on top of an unreviewed backlog makes both harder to
 reason about.
+
+### Export impact of Phase 2: indirect, and volume is the thing to watch
+
+Nothing here writes to `edges` directly — the review gate still does. But
+top-50 retrieval means more proposals, more accepted proposals, and therefore a
+larger live `edges` table, which is exported in full on every refresh.
+
+Before the first wide sweep, decide the volume ceiling deliberately: 11,147
+cross-tradition edges today, and a 10x proposal increase at current accept
+rates is a materially larger artifact and a denser graph in the web app.
+`--top-n` on the LLM stage is the throttle — the reranker widens what is
+*considered*, not necessarily what is *proposed*.
 
 ---
 
 ## Phase 3 — consolidate (guru, ~4h, needs Phase 2 in production)
 
 Only worth doing once the reranker is live and producing calibrated scores.
+
+> **Phase 3.1 is the only step in this plan that changes the export source
+> directly.** `auto_promote_edges.py` writes into live `edges`, which is what
+> `load_edges()` reads. Everything before this point is either sqlite-only or
+> mediated by human review. Treat it accordingly.
 
 **3.1 Replace the promotion gate.** `auto_promote_edges.py:46` filters
 `confidence >= 0.85` on a field where 93.4% of values are exactly 0.85 — it
@@ -177,9 +282,9 @@ chunks.
 
 | phase | repo | effort | blocks on | value if later phases never happen |
 |---|---|---|---|---|
-| 0 | guru | ~4h | nothing | high — stops ongoing, unrecoverable data loss |
+| 0 | guru | ~5h | nothing | high — stops data loss *and* fixes 929 dangling exported edges |
 | 1 | rellm | ~1d | nothing | high — settles the embedding-ceiling question either way |
-| 2 | guru | ~3h | 0 + 1 + gate | this is the coverage fix |
+| 2 | guru | ~3h | 0 + 1 + gate | this is the coverage fix; watch export volume |
 | 3 | guru | ~4h | 2 in prod | makes promotion trustworthy |
 
 **Start Phase 0 and Phase 1 on the same day.** Phase 0 is the higher-urgency
