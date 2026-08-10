@@ -101,6 +101,12 @@ def parse_edge_response(raw: str) -> dict | None:
                 start = i
             depth += 1
         elif ch == "}":
+            if depth == 0:
+                # Stray closing brace before any opener — a judge preamble can
+                # contain one. Ignore it rather than letting depth go negative,
+                # which would permanently desync the scan and drop a valid
+                # object appearing later in the response.
+                continue
             depth -= 1
             if depth == 0 and start is not None:
                 try:
@@ -170,8 +176,9 @@ def iter_reviewed_edges(
 ) -> Iterator[EdgePair]:
     """Yield reviewed staged_edges with both bodies resolvable on disk.
 
-    Skips pairs whose chunk files are missing from the corpus (144 chunks are
-    absent, costing ~277 pairs).
+    Skips pairs whose chunk files are missing from the corpus. 273 of the
+    corpus's 5,556 chunk ids do not resolve on disk; 144 of those participate
+    in staged_edges, costing ~277 reviewed pairs.
     """
     has_sim = "similarity" in {
         r[1] for r in conn.execute("PRAGMA table_info(staged_edges)")

@@ -150,11 +150,13 @@ def summarize(results):
             continue
         jp = sum(pos(r["edge_type"]) for r in rs) / len(rs)
         lab = [r for r in rs if r["gold"] is not None]
-        cp = sum(r["gold"] for r in lab) / len(lab) if lab else float("nan")
-        ag = sum(pos(r["edge_type"]) == r["gold"] for r in lab) / len(lab) if lab else float("nan")
+        # None, not NaN: the challenger arm has no labels by construction,
+        # and bare NaN is not valid JSON.
+        cp = sum(r["gold"] for r in lab) / len(lab) if lab else None
+        ag = sum(pos(r["edge_type"]) == r["gold"] for r in lab) / len(lab) if lab else None
         out[arm] = {"n": len(rs), "judge_pos": jp, "claude_pos": cp, "agreement": ag}
-        cps = f"{cp:.3f}" if lab else "   —"
-        ags = f"{ag:.3f}" if lab else "   —"
+        cps = f"{cp:.3f}" if cp is not None else "   —"
+        ags = f"{ag:.3f}" if ag is not None else "   —"
         print(f"{arm:<16}{len(rs):>6}{jp:>12.3f}{cps:>12}{ags:>12}")
 
     if "shared" in out and "challenger_only" in out:

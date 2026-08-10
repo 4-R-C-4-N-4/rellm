@@ -145,8 +145,13 @@ def build(conn: sqlite3.Connection) -> tuple[dict, dict, dict]:
                 }.get(r["edge_type"])
                 if attr:
                     setattr(cell, attr, getattr(cell, attr) + 1)
-            if r["confidence"] is not None:
-                cell.confidences.append(r["confidence"])
+                # reviewed rows only — every other column in the table excludes
+                # pending, so folding 2,058 unjudged proposals into the mean
+                # would make this column mean something different from its
+                # neighbours.
+                if r["confidence"] is not None:
+                    cell.confidences.append(r["confidence"])
+
 
     return trad, text, totals
 

@@ -222,11 +222,20 @@ at matched budget:
 
 | metric | current | budget-only | **hybrid** |
 |---|---|---|---|
-| candidate pairs | 19,891 | 19,506 | **17,838** |
-| chunk coverage | 89.5% | 72.4% | **100.0%** |
+| candidate pairs | 19,891 | 18,705 | **16,402** |
+| chunk coverage | 89.5% | 69.4% | **100.0%** |
 | tradition pairs (of 253) | 204 | 253 | **253** |
-| balance entropy | 0.831 | 0.922 | 0.911 |
-| yield on labelled subset | 0.549 | 0.569 | 0.562 |
+| balance entropy | 0.831 | 0.946 | 0.927 |
+| yield on labelled subset | 0.549 | 0.559 | 0.555 |
+
+> These are post-fix figures. A code review found that per-pair floors were
+> being applied on top of the budget rather than inside it (`max(floor, share)`
+> can only add), so the strategies were never actually compared at matched
+> spend. Correcting it moved budget and hybrid slightly; `worklevel` is
+> unaffected because it always ran at `--work-floor 0`. The hybrid probe below
+> was run against the pre-fix selection — the conclusion is unchanged, since it
+> rests on the rank analysis rather than on this table, but the exact hybrid
+> candidate set differs marginally from what the current code produces.
 
 Two intermediate failures worth keeping, because they define the design:
 
@@ -253,7 +262,7 @@ Redistribution, candidates per chunk:
 | taoism | 4.0 → 8.3 | | egyptian | 7.1 → 5.6 |
 | gnosticism | 4.3 → 6.0 | | neoplatonism | 5.6 → 4.6 |
 
-Every tradition reaches 100% chunk coverage, at ~10% *less* spend than the
+Every tradition reaches 100% chunk coverage, at ~18% *less* spend than the
 incumbent.
 
 ### What this does not establish
@@ -349,8 +358,11 @@ simulation alone.
 
 21 of 120 hybrid_only pairs failed with **body missing**, against 0 of 120 for
 current_only. Hybrid's coverage floor forces in chunks whose corpus files are
-absent (the 144 known missing). Any coverage-driven design needs a corpus
-existence check before it spends judge calls.
+absent: **273 of the corpus's 5,556 chunk ids do not resolve on disk** (144 of
+those participate in staged_edges, which is the figure quoted elsewhere in this
+document — the corpus-wide gap is nearly double). Any coverage-driven design
+needs an existence check before it spends judge calls;
+`edge_candidate_probe.py` now filters all arms equally.
 
 ## Probe 2 — work-level retrieval also fails, and the common cause is rank
 

@@ -17,7 +17,7 @@ Reads a snapshot read-only; writes results to runs/edges/symmetry/.
 Usage:
     # start a judge first, e.g. guru/scripts/run-mistral.sh
     python3 tools/edge_symmetry.py --n 400 --model Mistral-...gguf
-    python3 tools/edge_symmetry.py --resume runs/edges/symmetry/<run>/results.jsonl
+    python3 tools/edge_symmetry.py --report-only runs/edges/symmetry/<run>/results.jsonl
 """
 from __future__ import annotations
 
@@ -181,7 +181,7 @@ def summarize(results: list[dict]) -> dict:
         c_dis = sum(1 for r in consistent if pos(r["ab_edge_type"]) != r["gold_positive"]) / len(consistent)
         s["gold_disagree_when_flipped"] = f_dis
         s["gold_disagree_when_consistent"] = c_dis
-        s["flip_lift"] = f_dis / c_dis if c_dis else float("inf")
+        s["flip_lift"] = f_dis / c_dis if c_dis else None  # not Infinity: invalid JSON
     return s
 
 
@@ -198,7 +198,9 @@ def print_summary(s: dict, by_trad: dict) -> None:
     if "flip_lift" in s:
         print(f"\n  claude-disagreement | flipped     {s['gold_disagree_when_flipped']:.3f}")
         print(f"  claude-disagreement | consistent  {s['gold_disagree_when_consistent']:.3f}")
-        print(f"  LIFT                              {s['flip_lift']:.2f}x")
+        lift = s["flip_lift"]
+        print(f"  LIFT                              "
+              f"{f'{lift:.2f}x' if lift is not None else 'n/a (no consistent disagreements)'}")
         print("  (>1 means an order flip predicts a shaky label — usable as a "
               "grading-free\n   filter over the existing review set)")
 

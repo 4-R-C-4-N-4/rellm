@@ -169,7 +169,8 @@ def main() -> None:
     guard_not_source(db, cfg)
     print(f"snapshot: {db}")
 
-    conn = sqlite3.connect(str(db))
+    conn = (sqlite3.connect(f"file:{db}?mode=ro", uri=True) if args.report_only
+            else sqlite3.connect(str(db)))
     if not args.report_only:
         ensure_column(conn)
     emb = load_embeddings(conn)

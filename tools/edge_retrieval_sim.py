@@ -122,6 +122,27 @@ def select_current(S, trads, top_n: int, min_sim: float) -> set[tuple[int, int]]
     return out
 
 
+def allocate(weights: dict, tw: float, total_budget: int, floor: int,
+             label: str) -> dict:
+    """Split `total_budget` across pairs: a floor for every pair, the rest by
+    weight.
+
+    The floor is spent *inside* the budget, not added on top of it. Doing
+    `max(floor, share)` only ever adds, so with 253 tradition pairs and a
+    floor of 25 at least 6,325 candidates were forced regardless of the
+    requested budget — `--budget` was inert below that and the strategies were
+    never actually compared at matched spend.
+    """
+    n = len(weights) or 1
+    floor_total = floor * n
+    if floor_total > total_budget:
+        floor = total_budget // n
+        floor_total = floor * n
+        print(f"  note: {label} floor exceeded the budget; lowered to {floor}/pair")
+    remaining = max(0, total_budget - floor_total)
+    return {k: floor + int(round(remaining * w / tw)) for k, w in weights.items()}
+
+
 def select_budget(S, trads, uniq, yields, total_budget: int,
                   floor: int, min_obs: int, explore: float,
                   per_chunk_cap: int = 3):
@@ -152,8 +173,7 @@ def select_budget(S, trads, uniq, yields, total_budget: int,
             weights[(t1, t2)] = score * math.sqrt(n1 * n2)
 
     tw = sum(weights.values()) or 1.0
-    alloc = {k: max(floor, int(round(total_budget * w / tw)))
-             for k, w in weights.items()}
+    alloc = allocate(weights, tw, total_budget, floor, "tradition")
 
     out: set[tuple[int, int]] = set()
     for (t1, t2), m in alloc.items():
@@ -220,6 +240,10 @@ def select_hybrid(S, trads, uniq, yields, total_budget: int,
             out.add((i, j) if i < j else (j, i))
 
     # Pass 2 — yield-weighted allocation over whatever budget remains.
+    if len(out) > total_budget:
+        print(f"  note: hybrid's {per_chunk_min}/chunk coverage floor costs "
+              f"{len(out):,}, over the {total_budget:,} budget — this strategy "
+              f"cannot be compared at matched spend below that.")
     remaining = max(0, total_budget - len(out))
     if remaining:
         extra, alloc = select_budget(S, trads, uniq, yields, remaining,
@@ -307,10 +331,11 @@ def select_worklevel(S, ids, trads, labels, idx_of, total_budget: int,
             weights[(w1, w2)] = shrunk_rate((w1, w2)) * math.sqrt(n1 * n2)
 
     tw = sum(weights.values()) or 1.0
+    alloc = allocate(weights, tw, total_budget, pair_floor, "work-pair")
     out: set[tuple[int, int]] = set()
 
     for (w1, w2), wgt in weights.items():
-        m = max(pair_floor, int(round(total_budget * wgt / tw)))
+        m = alloc[(w1, w2)]
         i_idx, j_idx = wcols[w1], wcols[w2]
         block = S[np.ix_(i_idx, j_idx)]
         if block.size == 0:
@@ -383,6 +408,7 @@ def evaluate(name, sel, ids, trads, labels, uniq):
         "chunk_coverage": len(covered) / n_chunks,
         "chunks_uncovered": n_chunks - len(covered),
         "tradition_pairs_touched": len(per_trad_pair),
+        "max_tradition_pairs": len(uniq) * (len(uniq) - 1) // 2,
         "labelled_overlap": lab_hit,
         "yield_on_labelled": lab_pos / lab_hit if lab_hit else float("nan"),
         "unlabelled": len(sel) - lab_hit,
@@ -396,7 +422,7 @@ def print_eval(e):
     print(f"  candidate pairs          {e['pairs']:,}")
     print(f"  chunk coverage           {e['chunk_coverage']:.1%}  "
           f"({e['chunks_uncovered']:,} chunks with no candidate)")
-    print(f"  tradition pairs touched  {e['tradition_pairs_touched']} / 253 possible")
+    print(f"  tradition pairs touched  {e['tradition_pairs_touched']} / {e['max_tradition_pairs']} possible")
     print(f"  balance entropy          {e['balance_entropy']:.3f}  (1.0 = uniform)")
     print(f"  overlap with labels      {e['labelled_overlap']:,}")
     print(f"  yield on labelled subset {e['yield_on_labelled']:.3f}")
@@ -423,8 +449,12 @@ def main() -> None:
                     help="worklevel: per-block similarity percentile floor")
     ap.add_argument("--k-shrink", type=float, default=20.0,
                     help="worklevel: hierarchical shrinkage constant")
-    ap.add_argument("--work-floor", type=int, default=1,
-                    help="worklevel: minimum candidates per work pair")
+    ap.add_argument("--work-floor", type=int, default=0,
+                    help="worklevel: minimum candidates per work pair. Default 0 "
+                         "because there are 24,299 cross-tradition work pairs — "
+                         "a floor of 1 alone exceeds the whole budget. Must match "
+                         "edge_candidate_probe.py's default or the sim and the "
+                         "probe describe different selections.")
     ap.add_argument("--per-chunk-min", type=int, default=2,
                     help="hybrid: guaranteed candidates per chunk (coverage floor)")
     ap.add_argument("--per-chunk-cap", type=int, default=3,
@@ -490,6 +520,7 @@ def main() -> None:
     print_eval(e_wlv)
 
     print(f"\n{'=' * 74}\nCOMPARISON (budget matched)\n{'=' * 74}")
+    max_tp = e_cur["max_tradition_pairs"]
     hdr = f"{'metric':<24}{'current':>11}{'budget':>11}{'hybrid':>11}{'worklevel':>11}"
     print(hdr); print("-" * 74)
     def row(lbl, f, fmt="{:.3f}"):
@@ -497,7 +528,7 @@ def main() -> None:
                                      for e in (e_cur, e_bdg, e_hyb, e_wlv)))
     row("candidate pairs", lambda e: e["pairs"], "{:,.0f}")
     row("chunk coverage", lambda e: e["chunk_coverage"] * 100, "{:.1f}%")
-    row("tradition pairs /253", lambda e: e["tradition_pairs_touched"], "{:,.0f}")
+    row(f"tradition pairs /{max_tp}", lambda e: e["tradition_pairs_touched"], "{:,.0f}")
     row("balance entropy", lambda e: e["balance_entropy"])
     row("yield on labelled", lambda e: e["yield_on_labelled"])
     row("labelled overlap", lambda e: e["labelled_overlap"], "{:,.0f}")
