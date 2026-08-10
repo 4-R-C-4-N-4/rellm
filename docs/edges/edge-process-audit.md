@@ -457,6 +457,14 @@ Mistral replacement in the judge seat — it is as a *retrieval* component that
 sees what a bi-encoder structurally cannot, trained on exactly the 19,338
 labelled pairs already in hand.
 
+**Decision: build option 2.** Spec at `docs/edges/edge-reranker-build-spec.md`.
+It is chosen over option 1 (better embeddings) because it is a day of work
+against an unknown-length research effort, and because it is *diagnostic*: if a
+cross-encoder cannot beat the bi-encoder in the rank 6-50 band, that result
+promotes option 1 from a guess to a conclusion. Option 3 (accept the ceiling)
+is what happens if option 2 fails, and should not be adopted before it is
+tested.
+
 ## Artifacts
 
 | path | what |
