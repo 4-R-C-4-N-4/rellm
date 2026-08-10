@@ -63,6 +63,51 @@ similarity floor and widens retrieval, which reaches more of the 273 file-less
 chunk ids — so it would grow the dangling set. **Fixing it is now Phase 0.4,
 ahead of any retrieval change.**
 
+## The consumer: what guru-web actually does with edges
+
+This is what the whole plan is betting on improving, so it decides whether the
+bet pays. `src/lib/reader.ts:getRelatedPassages` is the query:
+
+```sql
+SELECT e.edge_type, e.tier, e.annotation, p.id AS partner_id, ...
+  FROM edges e
+  JOIN chunks p ON p.id = CASE WHEN e.source = $1 THEN e.target ELSE e.source END
+ WHERE (e.source = $1 OR e.target = $1)
+   AND e.edge_type = ANY(ARRAY['PARALLELS','CONTRASTS'])
+ ORDER BY e.edge_type = 'CONTRASTS',
+          CASE e.tier WHEN 'verified' THEN 0 WHEN 'proposed' THEN 1 ELSE 2 END,
+          p.id
+```
+
+Three facts that change the plan:
+
+1. **There is no quality signal in the ordering.** It sorts PARALLELS before
+   CONTRASTS, then by tier — but **11,000 of 11,102 cross-tradition edges are
+   `verified` PARALLELS**, so both keys are constant for nearly every chunk.
+   The effective sort is the final tiebreak: `p.id`, **alphabetical partner
+   chunk id**.
+2. **There is no `LIMIT`.** Every edge for the chunk is fetched. The UI slices
+   at `RELATED_VISIBLE = 10` and hides the rest behind a "N more" disclosure.
+3. **`weight` is never referenced anywhere in guru-web.** Zero occurrences.
+
+### Why this caps the bet
+
+**467 chunks — 13.2% of those with any edges — already have more than 10
+partners**, so what a reader sees is the alphabetically-first 10 of up to 177.
+For those chunks the ranking is not merely weak, it is arbitrary.
+
+That splits the payoff of the plan in two:
+
+- Improving edge **precision** (fewer bad edges) helps immediately, because bad
+  edges stop occupying the list at all.
+- Improving edge **coverage** — which is the entire point of Phase 2 — makes
+  the visible top-10 *worse* without a ranking signal, because more edges
+  compete for the same 10 alphabetical slots.
+
+**So the guru-web change is a prerequisite for Phase 2, not a follow-on.**
+Shipping wider retrieval into an unranked, unlimited query degrades the reading
+experience for exactly the hub chunks that matter most.
+
 ### A free win, no schema change
 
 `corpus-schema.sql` already has `weight REAL` on `edges`, documented as "an
@@ -70,8 +115,9 @@ optional similarity / relevance score attached by the pipeline for downstream
 ranking." `load_edges()` hardcodes `"weight": None` — it has always been NULL.
 
 The reranker score is exactly that value. Populating it needs **no DDL change
-and no `SCHEMA_VERSION` bump**, so no lockstep guru-web deploy. It gives the
-web app a ranking signal for free (Phase 2.4).
+and no `SCHEMA_VERSION` bump**. But it is inert until guru-web sorts by it, so
+"free win" understates the coupling: Phase 2.4 (populate) and Phase 2W (sort by
+it) only pay off together.
 
 ---
 
@@ -244,6 +290,49 @@ rates is a materially larger artifact and a denser graph in the web app.
 
 ---
 
+## Phase 2W — rank the reader query (guru-web, ~3h, ships WITH Phase 2)
+
+Without this, Phase 2 is a regression for hub chunks. Ship them together.
+
+**2W.1 Order by `weight`.** Add `e.weight` to the SELECT and slot it into the
+ORDER BY after tier and before `p.id`:
+
+```sql
+ ORDER BY e.edge_type = 'CONTRASTS',
+          CASE e.tier WHEN 'verified' THEN 0 WHEN 'proposed' THEN 1 ELSE 2 END,
+          e.weight DESC NULLS LAST,
+          p.id
+```
+
+`NULLS LAST` matters: `weight` is NULL for all 11,147 existing edges and will
+stay NULL for any edge promoted before the reranker exists. Without it, the
+transition period sorts scored edges *below* unscored ones on Postgres's
+default `NULLS FIRST` for DESC.
+
+**2W.2 Add a SQL `LIMIT`.** The query fetches every edge — up to 177 rows with
+bodies — to render 10. Once ordering is meaningful, cap the fetch (~50) and
+keep the "N more" disclosure over that.
+
+**2W.3 Decide what the count means.** The header renders
+`{parallels.length} parallels`. If Phase 2 triples edge volume, that number
+triples and stops being a quality signal. Either count only above a weight
+threshold, or state it as "showing 10 of N."
+
+### Interim option, before the reranker exists
+
+`weight` could be populated now with cosine similarity via
+`tools/edge_similarity_backfill.py`, giving 2W.1 something to sort by
+immediately and fixing the alphabetical ordering for the 467 already-truncated
+chunks.
+
+Caveat, stated honestly: similarity has **AUC 0.509 for predicting accept
+within the retrieved band**, so this is not a validated relevance ranking. The
+argument for it is only that alphabetical ordering is definitionally
+meaningless and similarity is at worst arbitrary. Treat it as a stopgap, not a
+result, and do not report it as an improvement without measuring it.
+
+---
+
 ## Phase 3 — consolidate (guru, ~4h, needs Phase 2 in production)
 
 Only worth doing once the reranker is live and producing calibrated scores.
@@ -285,6 +374,7 @@ chunks.
 | 0 | guru | ~5h | nothing | high — stops data loss *and* fixes 929 dangling exported edges |
 | 1 | rellm | ~1d | nothing | high — settles the embedding-ceiling question either way |
 | 2 | guru | ~3h | 0 + 1 + gate | this is the coverage fix; watch export volume |
+| 2W | guru-web | ~3h | ships **with** 2 | without it Phase 2 regresses hub chunks |
 | 3 | guru | ~4h | 2 in prod | makes promotion trustworthy |
 
 **Start Phase 0 and Phase 1 on the same day.** Phase 0 is the higher-urgency
@@ -306,3 +396,8 @@ Phase 1 retrain wants.
   re-review — out-of-fold reranker disagreement is the tool once Phase 1 exists.
 - **A human-graded gauge set.** Deferred by choice, but it is the hard ceiling
   on everything above and blocks Phase 3.1 specifically.
+- **Reranking `EXPRESSES` (chunk→concept) edges.** The same "no quality signal
+  in the ORDER BY" pattern appears at `reader.ts:326` and `:411`, which sort by
+  tier then id. Same fix, different pipeline, out of scope here — but worth a
+  ticket, because the tagger already produces a score that is being discarded
+  the same way.
