@@ -42,7 +42,8 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 import numpy as np
 
 RELLM_ROOT = Path(__file__).parent.parent
-GURU_ROOT = RELLM_ROOT.parent / "guru"
+# EDGE_GURU_ROOT lets a run target a guru worktree; see edge_inherit_ab.py.
+GURU_ROOT = Path(os.environ.get("EDGE_GURU_ROOT", RELLM_ROOT.parent / "guru"))
 JUDGE_ROOT = RELLM_ROOT / "runs" / "edges" / "relevance-judge"
 VERDICTS = ("relevant", "marginal", "not_relevant")
 

@@ -32,7 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 RELLM_ROOT = Path(__file__).parent.parent
-GURU_ROOT = RELLM_ROOT.parent / "guru"
+# EDGE_GURU_ROOT lets a run target a guru worktree; see edge_inherit_ab.py.
+GURU_ROOT = Path(os.environ.get("EDGE_GURU_ROOT", RELLM_ROOT.parent / "guru"))
 sys.path.insert(0, str(RELLM_ROOT / "src"))
 sys.path.insert(0, str(GURU_ROOT))
 

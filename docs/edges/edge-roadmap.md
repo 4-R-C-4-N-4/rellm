@@ -570,3 +570,15 @@ The (query, chunk) direction was built and measured the same day (guru branch
   query text and can learn this; a static edge weight cannot.
 - Rarity-bump ablation: removing it moves 26/240 slots. It stays until its
   replacement beats it on this harness.
+
+### Addendum, 2026-08-12 evening — power caveat discharged
+
+The re-powered judgment run required by the scorer-rungs verdict was run the
+day the per-work golden queries landed (guru-web PR #123). Frame and rung-2
+numbers reproduce on 1.7× the positives (kappa +0.868; matched-N selection
+45.5% → 47.4%); at a conservative global threshold the zero-shot reranker
+reaches the baseline ceiling (63.6% vs 65.2%). The fine-tune case narrows to
+volume-at-precision. Next step is engineering: the thresholded reranker term
+in `inherited_partners`, then A/B, then re-judge as ship gate. Full record:
+`docs/edges/query-scorer-rungs.md` re-run addendum +
+`runs/edges/relevance-judge/2026-08-12T18-14-23Z/FINDINGS.md`.

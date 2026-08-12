@@ -30,7 +30,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 RELLM_ROOT = Path(__file__).parent.parent
-GURU_ROOT = RELLM_ROOT.parent / "guru"
+# EDGE_GURU_ROOT lets a run target a guru worktree (e.g. the
+# retriever-parity-with-guru-web branch) without touching the main checkout.
+GURU_ROOT = Path(os.environ.get("EDGE_GURU_ROOT", RELLM_ROOT.parent / "guru"))
 sys.path.insert(0, str(RELLM_ROOT / "src"))
 sys.path.insert(0, str(GURU_ROOT))
 
@@ -51,6 +53,11 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--top-k", type=int, default=15)
     ap.add_argument("--weights", default="0.5,0.8,1.2")
+    ap.add_argument("--wide", action="store_true",
+                    help="add the per-work golden relevance queries "
+                         "(guru-web fixtures/golden-queries/<work>.json, "
+                         "kind=relevance) to the original golden set; "
+                         "provenance recorded in queries.json")
     args = ap.parse_args()
     weights = [float(w) for w in args.weights.split(",")]
     mid = weights[len(weights) // 2]
@@ -59,10 +66,31 @@ def main() -> None:
     from guru.preferences import UserPreferences        # noqa: E402
     from guru.retriever import HybridRetriever          # noqa: E402
 
-    gold = json.loads((GURU_ROOT.parent / "guru-web" / "src" / "__tests__"
+    # guru-web lives beside the MAIN guru checkout even when EDGE_GURU_ROOT
+    # points a run at a worktree.
+    GURU_WEB = RELLM_ROOT.parent / "guru-web"
+    gold = json.loads((GURU_WEB / "src" / "__tests__"
                        / "fixtures" / "golden-retrieval.json").read_text())
     queries = [q["query"] for q in gold["queries"]]
     queries += [g["query"] for g in gold.get("knownGaps", {}).get("cases", [])]
+    # Query provenance manifest: lets the judged labels be partitioned later
+    # (frozenEval=True work queries must never feed scorer training).
+    provenance = {q: {"source": "golden-retrieval.json"} for q in queries}
+    if args.wide:
+        gq_dir = GURU_WEB / "src" / "__tests__" / "fixtures" / "golden-queries"
+        for f in sorted(gq_dir.glob("*.json")):
+            if f.name.startswith("_"):
+                continue
+            work = json.loads(f.read_text())
+            for wq in work["queries"]:
+                if wq["kind"] != "relevance" or wq["query"] in provenance:
+                    continue
+                queries.append(wq["query"])
+                provenance[wq["query"]] = {
+                    "source": f.name, "work": work["work"],
+                    "tradition": work["tradition"],
+                    "frozenEval": work["frozenEval"],
+                }
 
     conn = sqlite3.connect(f"file:{GURU_ROOT/'data'/'guru.db'}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -147,8 +175,10 @@ def main() -> None:
         "".join(json.dumps(s) + "\n" for s in dedup.values()))
     (out / "summary.json").write_text(json.dumps({
         "created_at": ts, "top_k": args.top_k, "weights": weights,
-        "queries": len(queries), "surfaced_unique": len(dedup),
+        "queries": len(queries), "wide": args.wide,
+        "surfaced_unique": len(dedup),
     }, indent=2))
+    (out / "queries.json").write_text(json.dumps(provenance, indent=2))
     print(f"\nwrote {out}  ({len(dedup)} unique surfaced partners for judgment)")
 
 

@@ -1,6 +1,8 @@
 # Can an existing scorer find the relevant edge partners?
 
-**Date:** 2026-08-12 · **Status:** complete
+**Date:** 2026-08-12 · **Status:** complete · **Re-run addendum at end**
+(wider query set, 2026-08-12 evening — the verdict's power caveat is
+discharged; see final section before acting on first-run numbers)
 **Data:** `runs/edges/relevance-judge/2026-08-12T12-49-14Z/` — 100 doubly-graded
 (query, chunk) items, inter-grader kappa +0.800; 69 edge-surfaced partners of
 which 11 strict-relevant, 15 baseline chunks (66.7% strict), 16 random (0%).
@@ -122,3 +124,48 @@ python3 tools/edge_scorer_rungs.py --report
 Scores and metrics land beside the judgment run
 (`rung{1,2}_{scores,metrics}.json`). CPU-only by construction
 (`CUDA_VISIBLE_DEVICES` emptied before torch import).
+
+## Re-run addendum, 2026-08-12 evening — the wider query set
+
+The verdict's required re-run happened the same day the per-work golden
+queries landed (guru-web PR #123: all 58 works, 94 relevance queries).
+Full record: `runs/edges/relevance-judge/2026-08-12T18-14-23Z/FINDINGS.md`;
+surfaced set `runs/edges/inherit-ab/2026-08-12T18-13-54Z` (`--wide`).
+
+155 blind items, 108 surfaced (12 of 110 queries), 19 strict positives —
+1.7× the first run's power.
+
+| metric | first run | re-run |
+|---|---|---|
+| inter-grader kappa | +0.800 | **+0.868** |
+| baseline / surfaced / random strict | 66.7 / 15.9 / 0.0% | 65.2 / 17.6 / 8.3% |
+| rung 2 AUC strict | 0.760 | **0.742** |
+| rung 2 global top-N strict (N=#pos) | 45.5% | **47.4%** |
+| rung 2 global top-11 strict | 45.5% | **63.6%** |
+| rung 1 AUC strict | 0.522 | 0.686 |
+
+Three updates to the verdict:
+
+1. **Rung 2 reproduces.** Matched-N selection 45.5% → 47.4% on independent
+   data. The scorer choice stands.
+2. **The threshold story got stronger than the fine-tune story.** At a
+   conservative global threshold (top-11 of 108) zero-shot bge reaches
+   **63.6% strict — at the 65.2% baseline ceiling**. Precision at
+   conservative keep is a solved problem without training; rung 3's remaining
+   case is volume (more kept slots per query at that precision), not
+   precision.
+3. **Rung 1 is query-mix-dependent.** Cosine recovers signal (AUC 0.686) on
+   the new conceptual relevance queries while staying blind on
+   specific-concept queries. Still dominated by the cross-encoder at every
+   operating point; decision unchanged.
+
+Also confirmed: the corpus-ritual relevance queries transfer better than the
+old goldens (25.6% vs 13.0% surfaced-strict), exactly as the
+anchor-specificity account predicted — and 98/110 queries surface nothing,
+the anchor gate behaving as designed.
+
+**Next concrete step is now engineering, not measurement**: build the
+thresholded reranker term into `retrieval_legs.inherited_partners`
+(replace `pair_sim`; global score cutoff calibrated to the top-10% band),
+solve the CPU latency question, and A/B it. Re-judge on the built artifact
+as the ship gate.
