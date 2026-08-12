@@ -1,13 +1,14 @@
 # Edge pipeline — execution roadmap
 
-**Status:** ready to execute on merge
-**Scope:** the whole path from this PR to a fixed edge pipeline, across both
-repos.
+**Status:** Phase 0 shipped (guru #58, #59) · Phase 1 next
+**Scope:** the whole path to a fixed edge pipeline, across both repos.
 **Inputs:** `edge-process-audit.md` (findings), `edge-reranker-build-spec.md`
 (the model)
+**Working snapshot:** `data/snapshots/2026-08-12T00-05-42Z-edges-phase1`
 
-This PR is measurement only — it changes nothing in guru. What follows is the
-work it unblocks, sequenced by dependency rather than by importance.
+Sequenced by dependency rather than by importance. Measurements are dated
+where they have been re-checked: the audit's figures were true of the
+2026-08-09 snapshot, and two of them have since moved.
 
 ---
 
@@ -51,17 +52,18 @@ all, and only Phase 2 (indirectly) and Phase 3.1 (directly) touch it.
 of `edges` with no endpoint check, and `emit_validation()` checks
 `summary_nodes` child ids against chunks — **but never edge endpoints**.
 
-Measured on the snapshot:
+Measured on the 2026-08-09 snapshot:
 
 - **929 live edges reference a chunk endpoint with no corpus file** (63 of them
   cross-tradition PARALLELS/CONTRASTS).
 - They export as dangling references, the load succeeds, and guru-web fails to
   resolve them at render time.
 
-This is broken today, independent of anything here. But Phase 2 retires the
-similarity floor and widens retrieval, which reaches more of the 273 file-less
-chunk ids — so it would grow the dangling set. **Fixing it is now Phase 0.4,
-ahead of any retrieval change.**
+> **Re-measured 2026-08-12: zero.** All 5,559 chunk nodes resolve to exactly
+> 5,559 corpus TOMLs. The subsplit label separator fix (guru #56) and the
+> mabinogion re-chunk sync closed the gap. The missing endpoint check in
+> `emit_validation()` is still real, but it now guards against regression
+> rather than fixing a live fault — see 0.4.
 
 ## The consumer: what guru-web actually does with edges
 
@@ -124,26 +126,30 @@ it) only pay off together.
 ## The shape of it
 
 ```
-  PHASE 0 ──────────────► PHASE 2 ──────► PHASE 3
+  PHASE 0 ✓ ────────────► PHASE 2 ──────► PHASE 3
   guru: stop data loss    guru: rerank    guru: consolidate
-        (no model)              ▲
+        (shipped)               ▲
                                 │
   PHASE 1 ──────────────────────┘
   rellm: build the reranker      ▲
-                                 │
+        (next)                   │
                             DECISION GATE
 ```
 
-Phase 0 and Phase 1 are **independent and should run concurrently** — Phase 0
-is guru-side schema and write-path work, Phase 1 is rellm-side model work, and
-neither blocks the other. Phase 2 needs both.
+Phase 0 was guru-side schema and write-path work and is done, so Phase 1 —
+rellm-side model work — no longer runs concurrently with anything and blocks
+on nothing. Phase 2 needs Phase 1 through the gate.
 
 ---
 
-## Phase 0 — stop the data loss (guru, ~5h, no model required)
+## Phase 0 — stop the data loss (guru, ~4h, no model required) — SHIPPED
 
-**Do this first, and do it before the next sweep runs.** Every one of these is
-losing information right now, and the loss is not recoverable after the fact.
+> 0.1, 0.2 and 0.3 landed in guru #58 and #59. 0.4 re-measured to a
+> no-op; see below. Kept in full because the reasoning is the record of
+> why each column exists.
+
+**Done before the next sweep ran**, which was the point: every one of these
+was losing information irrecoverably while it went unfixed.
 
 ### 0.1 Persist negatives — `propose_edges.py:256`
 
@@ -162,7 +168,11 @@ curated rejections and never enter the review queue.
 > Care needed: `idx_staged_edges_provenance_unique` is `WHERE status='pending'`,
 > so the existing ON CONFLICT clause will not fire for rows written straight to
 > `rejected`. Either widen the index or upsert on a different predicate — this
-> is the one place in Phase 0 that can silently duplicate rows.
+> is the one place in Phase 0 that can silently duplicate rows, and the
+> corruption mode is quiet and cumulative: duplicated negatives pollute the
+> exact training set this plan exists to build. **Test it on a DB copy with a
+> deliberate double-run and assert the row count** before the first real sweep
+> writes through it.
 
 ### 0.2 Schema — one migration, `v3_009_edge_provenance.sql`
 
@@ -179,13 +189,27 @@ CREATE TABLE IF NOT EXISTS edge_progress (
 
 - `similarity` — the retrieval score, never persisted, which is why
   `--min-similarity` was never tunable against outcomes. Backfillable for
-  existing rows with `tools/edge_similarity_backfill.py`.
+  existing rows — but **not with `tools/edge_similarity_backfill.py` as it
+  stands**: that tool refuses any path resolving to the live guru.db, by
+  design. Port the backfill logic into a guru-side script and leave the rellm
+  guard intact; do not add an override flag, because the guard's entire value
+  is that rellm tooling *categorically* cannot write to the live DB. Risk
+  class of the backfill itself is low: it fills an all-NULL column with values
+  recomputable from on-disk embeddings, so recovery from any mistake is
+  re-NULL and re-run. Copy-test, then apply with before/after checks (row
+  count unchanged, zero non-NULL values overwritten, no inserts/deletes) —
+  proportionate ceremony, no more.
 - `presentation_order` — `pair_key()` canonicalises at `propose_edges.py:164`
   *before* insert, destroying the order the model saw. Record which passage was
   A, or AB/BA stays permanently unauditable in the store.
 - `edge_progress` — mirrors `tagging_progress`. **836 chunks (15%) have never
   been evaluated** and nothing records what has been swept, so coverage is a
   function of which ad-hoc `--tradition`/`--text` runs someone remembered.
+  **Seed it empty; do not backfill from history.** Nothing recorded which
+  chunks were actually swept, so any backfill is inference ("appeared as a
+  source at some point"), and it would mark chunks done under the
+  top-5-with-floor regime that Phase 2 retires — suppressing exactly the
+  re-coverage the wider sweep is for. Populate going forward only.
 
 ### 0.3 `serve-llama.sh` context bug
 
@@ -196,44 +220,70 @@ bite the Phase 1 probe runs otherwise.
 
 ### 0.4 Stop exporting dangling edges — `export.py:load_edges`
 
-929 live edges point at a chunk with no corpus file and are exported as
-dangling references today, because `load_edges()` filters nothing and the
-inline validation never checks edge endpoints.
+> **Re-measured 2026-08-12: the dangling edges are gone.** All 5,559 chunk
+> nodes resolve to exactly 5,559 corpus TOMLs; zero dangling endpoints in live
+> `edges`, zero in `staged_edges`. The 929 figure was real on 2026-08-09, and
+> the corpus work since — the subsplit label separator fix (guru #56) and the
+> mabinogion re-chunk sync — closed it. **The filter half of this item is now
+> a no-op and the Phase 2 sequencing constraint is void.**
 
-Filter endpoints against the emitted chunk set, and add an edge-endpoint check
-to `emit_validation()` so a regression fails the load loudly instead of
-degrading the web app silently.
-
-> Sequence this **before** Phase 2. Retiring the similarity floor reaches more
-> of the 273 file-less chunk ids, so fixing the filter afterwards means
-> shipping a known-worse export in between.
+What remains is the cheap half, and it is worth keeping: `emit_validation()`
+still never checks edge endpoints, so if this regresses the export succeeds
+and guru-web fails to resolve at render time. Add the endpoint check as a
+regression guard — roughly twenty minutes, no longer an hour, and no longer
+blocking anything.
 
 **Phase 0 exit:** a sweep can run without losing negatives, provenance, or
-progress, and the export stops emitting dangling edges.
+progress. **0.1, 0.2 and 0.3 shipped** (guru #58, #59); 0.4 reduced to a
+validation guard.
 
-**Export impact of Phase 0: none.** Every change is confined to `staged_edges`,
-a new `edge_progress` table, and the export's own endpoint filter. `edges` is
-untouched, so staging sees no behavioural change other than 929 broken
-references disappearing.
+**Export impact of Phase 0: none.** Every change is confined to `staged_edges`
+and the new `edge_progress` table. `edges` is untouched, so staging sees no
+behavioural change at all.
 
 ---
 
-## Phase 1 — build the reranker (rellm, ~1 day, concurrent with Phase 0)
+## Phase 1 — build the reranker (rellm, ~2 days) — NEXT
 
 Full detail in `edge-reranker-build-spec.md`. Sequence:
 
-1. Export 19,338 labelled pairs via `rellm.edges.iter_reviewed_edges`, grouped
-   splits via `group_key` (1,877 groups).
-2. Mine easy negatives from random cross-tradition pairs — base rate ~0, so no
-   judging needed. Target ~1:1 against the existing hard negatives.
-3. Train ModernBERT-large as a binary cross-encoder. Collapse CONTRASTS into
-   positive; 102 examples is not learnable.
-4. Offline eval: AUC, calibration, and **precision within rank 6–50
-   specifically** — overall AUC can look healthy while the band that matters
-   does not move.
-5. Live probe via `tools/edge_candidate_probe.py --strategy reranker`.
+Working snapshot: `data/snapshots/2026-08-12T00-05-42Z-edges-phase1`, taken
+after Phase 0 landed, so `similarity` is populated natively and no rellm-side
+backfill is needed. **20,379 reviewed pairs**, none dropped for missing bodies.
+
+1. **Partition first, then build the band eval set.** Split the 824 work-pair
+   groups into train / held-out, stratified by tradition pair. Then sample
+   300–500 rank 6–50 pairs **from held-out groups only**, stratified by
+   tradition pair and rank sub-band, Claude-grade them, and freeze. Doing it
+   in this order costs no training data; sampling first and excluding groups
+   afterwards would drop ~4,000 labelled pairs. The decision gate below is
+   measured on this set — without it the only band labels are ~130 probe pairs
+   carrying Qwen-27B judge labels (+0.10–0.15 bias), which cannot distinguish
+   the 0.65 ship bar from the 0.50 kill bar.
+2. Export the 20,379 labelled pairs via `rellm.edges.iter_reviewed_edges`.
+   **Group by work pair, not text pair** — `group_key` needs a work-aware
+   variant reading `sources/works.toml`. 178 of 229 texts belong to a
+   multi-text work, and 39.8% of pairs sit in a text-pair group finer than
+   their work-pair group, so text-level splits put chapters of one treatise on
+   both sides. 824 work-pair groups at ~25 pairs each. See the spec's §4.
+3. Mine easy negatives from random cross-tradition pairs — target ~1:1 against
+   the 9,036 existing hard negatives. Spot-check the assumed ~0 base rate by
+   judging ~100 random pairs first (rank 76+ yielded 0.232 in the probes;
+   uniform random should be far lower, but measure it). Mine part of the
+   negative budget from the rank 6–50 band itself so the deployment band is
+   not out-of-distribution relative to both training clusters.
+4. Train ModernBERT-large as a binary cross-encoder. Collapse CONTRASTS into
+   positive; 108 examples is not learnable.
+5. Offline eval: AUC, calibration, and **precision within rank 6–50 on the
+   frozen band set** — overall AUC can look healthy while the band that
+   matters does not move. Report the residual author-level leakage that
+   work-pair grouping still permits rather than engineering around it.
+6. Live probe via `tools/edge_candidate_probe.py --strategy reranker`.
 
 ### DECISION GATE
+
+Measured on the frozen Claude-graded band set (step 1), with the live probe as
+confirmation — not on the pooled probe labels alone.
 
 | outcome | next |
 |---|---|
@@ -248,7 +298,7 @@ past. If it cannot, that is a finding worth having cheaply.
 
 ---
 
-## Phase 2 — rerank in retrieval (guru, ~3h, needs Phase 0 + Phase 1)
+## Phase 2 — rerank in retrieval (guru, ~3h, needs Phase 1 + the gate)
 
 This is the change that actually fixes coverage, and it is small once the
 reranker exists.
@@ -369,18 +419,18 @@ chunks.
 
 ## Sequencing summary
 
-| phase | repo | effort | blocks on | value if later phases never happen |
+| phase | repo | effort | blocks on | status |
 |---|---|---|---|---|
-| 0 | guru | ~5h | nothing | high — stops data loss *and* fixes 929 dangling exported edges |
-| 1 | rellm | ~1d | nothing | high — settles the embedding-ceiling question either way |
-| 2 | guru | ~3h | 0 + 1 + gate | this is the coverage fix; watch export volume |
+| 0.1–0.3 | guru | ~4h | nothing | **shipped** — guru #58, #59 |
+| 0.4 | guru | ~20m | nothing | reduced to a validation guard; nothing dangling today |
+| 1 | rellm | ~2d | nothing | **next** — settles the embedding-ceiling question either way |
+| 2 | guru | ~3h | 1 + gate | this is the coverage fix; watch export volume |
 | 2W | guru-web | ~3h | ships **with** 2 | without it Phase 2 regresses hub chunks |
 | 3 | guru | ~4h | 2 in prod | makes promotion trustworthy |
 
-**Start Phase 0 and Phase 1 on the same day.** Phase 0 is the higher-urgency
-half despite being the less interesting one: it needs no model, it is a few
-hours, and every sweep that runs before it permanently discards negatives the
-Phase 1 retrain wants.
+Phase 0 was the urgent half and is done: every sweep that ran before it
+permanently discarded the negatives Phase 1 wanted, and that bleeding has
+stopped. Phase 1 no longer blocks on anything.
 
 ---
 
