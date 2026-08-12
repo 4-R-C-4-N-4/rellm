@@ -157,8 +157,9 @@ def main() -> None:
     if gold_path.exists():
         gold = {int(k): v for k, v in json.loads(gold_path.read_text()).items()}
         print(f"\ncalibration arm ({len(gold)} pairs with stored verdicts):")
-        for label, cdir in (("propose rubric", run / "grades-calib"),
-                            ("review rubric ", run / "grades-calib-review")):
+        for label, cdir in (("propose rubric  ", run / "grades-calib"),
+                            ("review rubric   ", run / "grades-calib-review"),
+                            ("review, ANCHORED", run / "grades-calib-anchored")):
             if not cdir.exists():
                 continue
             got = {}
