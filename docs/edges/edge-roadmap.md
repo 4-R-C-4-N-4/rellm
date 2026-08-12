@@ -582,3 +582,19 @@ volume-at-precision. Next step is engineering: the thresholded reranker term
 in `inherited_partners`, then A/B, then re-judge as ship gate. Full record:
 `docs/edges/query-scorer-rungs.md` re-run addendum +
 `runs/edges/relevance-judge/2026-08-12T18-14-23Z/FINDINGS.md`.
+
+### Addendum, 2026-08-12 night — EDGE_RERANK built; ship gate passed on quality, failed on synchronous latency
+
+The thresholded reranker term exists (guru branch `edge-rerank-threshold`,
+89722a24): pair_sim replaced by zero-shot bge logits, global threshold −3.8,
+EDGE_RERANK_MAX_PAIRS=120, transfer = sigmoid(logit − threshold). Blind
+re-judge of what the built term actually surfaces: **72.7% strict-relevant
+(11 kept slots, 0% not-relevant) vs 62.5% baseline in the same run, kappa
++1.000** — the 15.9%-vs-66.7% trade that kept EDGE_INHERIT off is resolved,
+on small n (see run FINDINGS for the CI caveat). Latency: 98/110 queries
+pay ~0.02s (anchor gate); scoring queries pay ~58s at the 120-pair cap on
+CPU fp32 — synchronous serving is out; async/offline scoring, quantisation,
+or distillation is the remaining engineering line. Rung-3 fine-tune is now
+purely a kept-volume question. EDGE_RERANK defaults off; enabling is the
+owner's call. Records: `runs/edges/relevance-judge/2026-08-12T19-12-02Z/`
+and `runs/edges/inherit-ab/2026-08-12T19-11-27Z/`.

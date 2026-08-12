@@ -58,6 +58,13 @@ def main() -> None:
                          "(guru-web fixtures/golden-queries/<work>.json, "
                          "kind=relevance) to the original golden set; "
                          "provenance recorded in queries.json")
+    ap.add_argument("--rerank", action="store_true",
+                    help="A/B the thresholded reranker term: arms A (base), "
+                         "C@mid (pair_sim inheritance), R@mid (EDGE_RERANK). "
+                         "surfaced.jsonl records R-arm entrants only (the "
+                         "ship-gate judgment set); per-query latency logged "
+                         "to latency.json. Needs torch (run under a venv "
+                         "with transformers).")
     args = ap.parse_args()
     weights = [float(w) for w in args.weights.split(",")]
     mid = weights[len(weights) // 2]
@@ -97,11 +104,13 @@ def main() -> None:
     retriever = HybridRetriever()
     prefs = UserPreferences.allow_all()
 
-    def run(q, qe, inherit=None, rarity=True):
-        for var in ("EDGE_INHERIT", "EDGE_LEG"):
+    def run(q, qe, inherit=None, rarity=True, rerank=None):
+        for var in ("EDGE_INHERIT", "EDGE_LEG", "EDGE_RERANK"):
             os.environ.pop(var, None)
         if inherit:
             os.environ["EDGE_INHERIT"] = str(inherit)
+        if rerank:
+            os.environ["EDGE_RERANK"] = str(rerank)
         saved = retriever._diversity_boost
         if not rarity:
             retriever._diversity_boost = 0.0
@@ -109,21 +118,46 @@ def main() -> None:
             return retriever.retrieve(q, qe, prefs, top_k=args.top_k)
         finally:
             retriever._diversity_boost = saved
-            os.environ.pop("EDGE_INHERIT", None)
+            for var in ("EDGE_INHERIT", "EDGE_RERANK"):
+                os.environ.pop(var, None)
 
-    arms = [("A  base", dict(inherit=None, rarity=True)),
-            ("B  base, no rarity", dict(inherit=None, rarity=False))]
-    arms += [(f"C  inherit {w}", dict(inherit=w, rarity=True)) for w in weights]
-    arms += [(f"D  inherit {mid}, no rarity", dict(inherit=mid, rarity=False))]
+    if args.rerank:
+        # Ship-gate A/B: same anchored envelope, pair_sim vs thresholded
+        # reranker. B/D (rarity ablations) already measured; keep it lean.
+        arms = [("A  base", dict(inherit=None, rarity=True)),
+                (f"C  inherit {mid}", dict(inherit=mid, rarity=True)),
+                (f"R  rerank {mid}", dict(rerank=mid, rarity=True))]
+    else:
+        arms = [("A  base", dict(inherit=None, rarity=True)),
+                ("B  base, no rarity", dict(inherit=None, rarity=False))]
+        arms += [(f"C  inherit {w}", dict(inherit=w, rarity=True))
+                 for w in weights]
+        arms += [(f"D  inherit {mid}, no rarity",
+                  dict(inherit=mid, rarity=False))]
 
     print(f"top-k {args.top_k}   queries {len(queries)}   arms {len(arms)}\n")
 
+    import time
+    latency: dict[str, dict[str, dict]] = {}
     results: dict[str, dict[str, list]] = {}
-    for q in queries:
+    for qn, q in enumerate(queries):
         qe = embed(q)
         results[q] = {}
+        latency[q] = {}
         for name, kw in arms:
+            if kw.get("rerank"):
+                from guru import rerank as _rr
+                _rr.LAST.clear()
+            t0 = time.monotonic()
             results[q][name] = run(q, qe, **kw)
+            rec = {"seconds": round(time.monotonic() - t0, 3)}
+            if kw.get("rerank"):
+                rec.update({f"rerank_{k}": round(v, 3)
+                            for k, v in _rr.LAST.items()})
+            latency[q][name] = rec
+        if args.rerank:
+            print(f"  [{qn + 1}/{len(queries)}] {q[:56]:<58}"
+                  f"{latency[q][arms[-1][0]]['seconds']:>8.1f}s", flush=True)
 
     base_name = arms[0][0]
     surfaced = []
@@ -137,10 +171,11 @@ def main() -> None:
             new = [c for c in results[q][name] if c.chunk_id not in a_ids]
             delta += len(new)
             trads.update(c.tradition for c in results[q][name])
-            if name.startswith(("C", "D")):
+            if name.startswith(("C", "D", "R")):
                 # verify entrants are actually edge material: they entered only
-                # once EDGE_INHERIT was on and are absent from both baselines
-                b_ids = [c.chunk_id for c in results[q]["B  base, no rarity"]]
+                # once the term was on and are absent from the baseline(s)
+                b_ids = [c.chunk_id for c in
+                         results[q].get("B  base, no rarity", [])]
                 for c in new:
                     if c.chunk_id not in b_ids:
                         entered += 1
@@ -151,7 +186,7 @@ def main() -> None:
                                           if x not in ids][:3],
                             "body": c.body[:1200],
                         })
-        print(f"{name:<26}{delta:>8}{entered if name[0] in 'CD' else '':>9}"
+        print(f"{name:<26}{delta:>8}{entered if name[0] in 'CDR' else '':>9}"
               f"{len(trads):>7}")
 
     mid_arm = f"C  inherit {mid}"
@@ -159,7 +194,8 @@ def main() -> None:
     print(f"  {'query':<48}{'edge-in':>9}  entrant traditions")
     for q in queries:
         a_ids = {c.chunk_id for c in results[q][base_name]}
-        b_ids = {c.chunk_id for c in results[q]['B  base, no rarity']}
+        b_ids = {c.chunk_id for c in
+                 results[q].get('B  base, no rarity', [])}
         new = [c for c in results[q][mid_arm]
                if c.chunk_id not in a_ids and c.chunk_id not in b_ids]
         print(f"  {q[:46]:<48}{len(new):>9}  "
@@ -170,6 +206,10 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     dedup: dict[tuple, dict] = {}
     for s in surfaced:
+        # In rerank mode surfaced.jsonl is the ship-gate judgment set for the
+        # NEW term — R-arm entrants only; C entrants stay in the printed table.
+        if args.rerank and not s["arm"].startswith("R"):
+            continue
         dedup[(s["query"], s["chunk_id"])] = s
     (out / "surfaced.jsonl").write_text(
         "".join(json.dumps(s) + "\n" for s in dedup.values()))
@@ -179,6 +219,7 @@ def main() -> None:
         "surfaced_unique": len(dedup),
     }, indent=2))
     (out / "queries.json").write_text(json.dumps(provenance, indent=2))
+    (out / "latency.json").write_text(json.dumps(latency, indent=2))
     print(f"\nwrote {out}  ({len(dedup)} unique surfaced partners for judgment)")
 
 
