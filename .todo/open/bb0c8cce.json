@@ -1,0 +1,15 @@
+{
+  "id": "bb0c8cce",
+  "type": "chore",
+  "state": "open",
+  "summary": "Ship gate on the student: EDGE_RERANK_MODEL in guru, A/B rerun, blind re-judge, lean-settings latency",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:36.180Z",
+  "updated_at": "2026-08-12T23:50:36.219Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "Small guru commit on edge-rerank-threshold (PR #61): EDGE_RERANK_MODEL env selects model path so the student drops into the existing term. Then the full gate protocol: inherit_ab --wide --rerank with student, judge --emit, two independent grading passes, report. Threshold recalibrated on student logits (same top-decile procedure). Ship decision and any enable-anywhere is the owner call; sync serving stays off unless the owner explicitly accepts the measured lean-settings cost."
+}

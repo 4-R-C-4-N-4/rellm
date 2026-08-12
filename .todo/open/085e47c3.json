@@ -1,0 +1,15 @@
+{
+  "id": "085e47c3",
+  "type": "chore",
+  "state": "open",
+  "summary": "Freeze the spec: docs/edges/thin-scorer-spec.md — latency/size/quality targets, architecture candidates, data budget, eval protocol",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:35.669Z",
+  "updated_at": "2026-08-12T23:50:35.700Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "Numbers to freeze before any code: param budget (<=25M, MiniLM-class), latency target (>=100 pairs/s on ONE cpu thread, fp32 and int8), quality bars (surfaced AUC >= 0.74 on the 2026-08-12T18-14-23Z judged set; kept-slot strict >= baseline at ship gate on frozen-work queries), teacher-agreement target (Pearson vs bge logits on held-out pairs), training data budget (queries x pairs/query), candidate students (2-3, cheapest first). One doc, committed; every later child cites it."
+}

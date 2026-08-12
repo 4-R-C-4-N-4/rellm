@@ -1,0 +1,15 @@
+{
+  "id": "6ab430e5",
+  "type": "feature",
+  "state": "open",
+  "summary": "Pair sampler: per-query candidate strata (baseline top-K, edge partners, hard negatives, random) to pairs.jsonl",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:35.799Z",
+  "updated_at": "2026-08-12T23:50:35.834Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "tools/scorer_pairs.py, EDGE_GURU_ROOT-aware (guru worktree; never branch-switch the main checkout). Strata per query: baseline retriever top-K (positive-rich), anchored edge partners (the operational stratum, via inherited_partners), hard negatives (high vector-cosine chunks NOT retrieved), random floor. Cap per query per spec. Skip chunks in the known-apparatus list (guru-web todo:6e0c2a63 roll-up) for positive strata only. Output rows carry stratum + provenance for later analysis."
+}
