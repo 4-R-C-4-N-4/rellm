@@ -544,3 +544,29 @@ failure that edges would cure.
 - **Cheapest next probe** if edges-in-retrieval stays live: judge sampled
   partners for 2–3 golden queries for relevance *to the query*. Closes the
   question or funds it.
+
+### Addendum update, later 2026-08-12 — the anchored-inheritance experiment
+
+The (query, chunk) direction was built and measured the same day (guru branch
+`edge-score-inheritance` stacked on #60; rellm `tools/edge_inherit_ab.py`,
+`tools/edge_relevance_judge.py`; findings in
+`runs/edges/relevance-judge/2026-08-12T12-49-14Z/FINDINGS.md`).
+
+- **The (query, chunk) judgment frame is valid: inter-grader kappa +0.800**
+  (vs +0.04 for pair labels), with clean ceiling/floor separation (baseline
+  66.7% strict-relevant, random 0.0%). Label generation for a relevance
+  scorer is methodologically safe.
+- **Anchored score inheritance works mechanically** — dose-responsive,
+  surfaces nothing on anchor-less queries — and lifts edge material to 15.9%
+  strict relevance vs a 0% floor. But it displaces ~67%-relevant baseline
+  chunks, ~4:1 against. **EDGE_INHERIT stays off.**
+- **The trained scorer's bar is now a measured number**: raise surfaced-slot
+  strict relevance from 15.9% toward 66.7%. The deployment slot is the
+  `pair_sim` multiplier in `retrieval_legs.inherited_partners` — no
+  architectural change when the model lands.
+- Transfer strength varies by anchor specificity (family-level "cosmology"
+  4/8 strict; concept-level "wu wei" 0/11): a parallel shares the *move*, not
+  the *topic*, so specific-topic queries transfer worst. A scorer sees the
+  query text and can learn this; a static edge weight cannot.
+- Rarity-bump ablation: removing it moves 26/240 slots. It stays until its
+  replacement beats it on this harness.
