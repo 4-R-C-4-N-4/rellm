@@ -181,9 +181,31 @@ def main() -> None:
             # every stored positive and learns nothing.
             fp_n = sum(1 for i in both if got[i] and not gold[i])
             fn_n = sum(1 for i in both if not got[i] and gold[i])
-            print(f"  {label}  n={len(both):<3} agreement {agree/len(both):>5.1%}   "
+            # Raw agreement is worthless on an unbalanced set — calling
+            # everything positive scores the base rate for free. Cohen's
+            # kappa is agreement above what the two marginals alone predict.
+            pe = gp * fp + (1 - gp) * (1 - fp)
+            po = agree / len(both)
+            kappa = (po - pe) / (1 - pe) if pe < 1 else float("nan")
+            print(f"  {label}  n={len(both):<3} agreement {po:>5.1%} "
+                  f"(chance {pe:.1%}, kappa {kappa:+.3f})   "
                   f"stored {gp:.3f} -> fresh {fp:.3f} (bias {fp-gp:+.3f})   "
                   f"false-pos {fp_n}  false-neg {fn_n}")
+            # Does the grader know when it is right?
+            confs = {}
+            for f in sorted(cdir.glob("*.jsonl")):
+                for line in f.read_text().splitlines():
+                    if line.strip():
+                        try:
+                            g = json.loads(line)
+                            confs[g["idx"]] = g.get("confidence", 0)
+                        except (json.JSONDecodeError, KeyError):
+                            pass
+            hi = [i for i in both if confs.get(i, 0) >= 0.7]
+            if hi:
+                ha = sum(gold[i] == got[i] for i in hi) / len(hi)
+                print(f"{'':<17} confident subset (>=0.7): n={len(hi)}  "
+                      f"agreement {ha:.1%}")
         print("  The stored labels came from prompts/ingest/edge-review.md, not from"
               "\n  the proposal prompt in rellm.edges. Grading the band against the"
               "\n  proposal prompt measures a different threshold than the one the"
