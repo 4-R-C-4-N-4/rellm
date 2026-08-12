@@ -1,6 +1,11 @@
 # Edge pipeline — execution roadmap
 
-**Status:** Phase 0 shipped (guru #58, #59) · Phase 1 next
+**Status:** Phase 0 shipped (guru #58, #59) · **Phase 1 HELD — see the
+2026-08-12 addendum at the end of this document.** Two findings from Phase 1
+step 1 undercut the plan as written: the training labels are not reproducible,
+and the model's deployment target was measured and found structurally inert.
+The addendum records both and the decision they force. Phases 1–3 below are
+kept as the record of the plan they amend.
 **Scope:** the whole path to a fixed edge pipeline, across both repos.
 **Inputs:** `edge-process-audit.md` (findings), `edge-reranker-build-spec.md`
 (the model)
@@ -132,13 +137,13 @@ it) only pay off together.
                                 │
   PHASE 1 ──────────────────────┘
   rellm: build the reranker      ▲
-        (next)                   │
+        (HELD — see addendum)    │
                             DECISION GATE
 ```
 
-Phase 0 was guru-side schema and write-path work and is done, so Phase 1 —
-rellm-side model work — no longer runs concurrently with anything and blocks
-on nothing. Phase 2 needs Phase 1 through the gate.
+Phase 0 was guru-side schema and write-path work and is done. Phase 1 started,
+and its first deliverable invalidated its own gate — see the addendum. Phase 2
+needs a working Phase 1 through the gate, in whatever form Phase 1 resumes.
 
 ---
 
@@ -451,3 +456,91 @@ stopped. Phase 1 no longer blocks on anything.
   tier then id. Same fix, different pipeline, out of scope here — but worth a
   ticket, because the tagger already produces a score that is being discarded
   the same way.
+
+---
+
+## Addendum, 2026-08-12 — what Phase 1 step 1 found, and where that leaves the plan
+
+Phase 1's first deliverable (the frozen band eval set) was built —
+`runs/edges/band-eval/2026-08-12T00-28-04Z/`, 399 rank 6–50 pairs graded,
+work-level partition, 79 tradition pairs — and its calibration arm invalidated
+the gate it was built for. Full write-ups: that run's `FINDINGS.md`,
+`runs/edges/label-repro/2026-08-12T01-36-17Z/FINDINGS.md`, and
+`runs/edges/retrieval-novelty/FINDINGS.md`.
+
+### Finding 1 — the labels are not a stable quantity
+
+Fresh Claude grading, under the project's own review rubric
+(`guru/prompts/ingest/edge-review.md`), recovers the archived `agent-claude`
+verdicts at chance on boundary pairs: **kappa +0.040** (n=60). Both candidate
+confounds were tested and refuted:
+
+- *Restricted range* is real (full-range kappa +0.266) but mislocates nothing:
+  random pairs reproduce at 95%, stored negatives at 83%, **stored positives
+  at 33%**. Fresh review rejects two thirds of the edges the archive accepted.
+- *Anchoring* (showing the proposer's verdict + justification, the reviewer's
+  actual view) moved kappa only to +0.129 and made the bias *more* negative.
+
+No cheap filter separates reproducible positives from the rest (similarity
+0.790 vs 0.770; stored confidence is the inert 0.85 on every rejected row).
+
+Consequences: §2's ship gate cannot distinguish 0.65 from 0.50 against ground
+truth this soft, the kill branch would fire on label noise while presenting as
+a verdict on the embedding space, and the same labels back the 11,102 verified
+live edges. "Are these chunks parallel?" appears to be underdetermined absent
+a task — the positives are where the subjectivity lives.
+
+Two side results, both actionable:
+
+- **Random-pair base rate is 0.050, not ~0** (n=40), and both hits are
+  substantive parallels (one is Boehme↔Plotinus, on the review rubric's own
+  proven-real list). §4's unjudged easy-negative mining would train the model
+  to suppress its own objective. Mine with a judging pass or not at all.
+- ~12% of band pairs are editorial apparatus (prefaces, catalogues, front
+  matter), grading 0.24 positive vs 0.56 for the rest.
+  `staged_cleanups.status='apparatus'` exists and has never been populated.
+
+### Finding 2 — the deployment target was measured, and edges-as-a-leg is inert
+
+The owner's framing: the human-in-the-loop step is retrieval in guru-web —
+chunk-pair parallelism is not independently judgeable, relevance to a query
+is. That reframe was tested, which first required bringing the sqlite pilot
+retriever to guru-web parity (**guru PR #60**: three-tier concept resolution,
+lexical FTS5 leg, summary leg, production scoring; chunk↔chunk traversal moved
+behind `EDGE_LEG=on` — guru-web never had it).
+
+Against the parity baseline, over guru-web's golden queries
+(`runs/edges/retrieval-novelty/FINDINGS.md`):
+
+- **Reach is real**: median edge partner sits at vector rank 2,056 of 5,559;
+  only 5.8% within vector top-200. The graph reaches material no similarity
+  widening finds. Twice confirmed.
+- **The motivating examples are gone**: both documented `knownGaps` failures
+  are fixed by the baseline's lexical leg; edge partners contain the expected
+  tradition in neither.
+- **Under production scoring the leg is inert**: edge chunks enter the final
+  top-15 in 4 of 240 slots. A scoreless candidate cannot compete in an
+  additive scorer.
+- **The oversupply stands**: 721 undifferentiated candidates per query for 15
+  slots.
+
+The chain is reach → selection → relevance. Reach exists, selection does not,
+relevance is unmeasured — and there is no longer a demonstrated retrieval
+failure that edges would cure.
+
+### Where this leaves Phases 1–3
+
+- **Phase 1 as specced (chunk-pair cross-encoder against review labels) is
+  held.** Its training target is unstable (Finding 1) and its deployment
+  rationale unproven (Finding 2). Do not resume without a decision on what
+  the model predicts.
+- **The surviving model concept is a (query, chunk) relevance scorer** — the
+  selection layer for whatever leg or panel consumes edges — evaluated on
+  query relevance, where stability is testable (and must be tested first, the
+  same way the pair labels were).
+- **Phase 2's retrieval rewire is moot until selection exists.** Phase 2W (the
+  reader panel ordering fix) is untouched by all of this and remains the one
+  consumer edges demonstrably have today.
+- **Cheapest next probe** if edges-in-retrieval stays live: judge sampled
+  partners for 2–3 golden queries for relevance *to the query*. Closes the
+  question or funds it.

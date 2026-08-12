@@ -1,6 +1,13 @@
 # edge-reranker — Build Spec
 
-**Status:** ready for execution
+**Status:** HELD, 2026-08-12 — see the roadmap's addendum. The band eval set
+(this spec's first deliverable) was built and its calibration arm found the
+training labels irreproducible (kappa +0.040 on boundary pairs, positives
+reproducing at 33%); a retrieval measurement against the parity baseline
+(guru #60) found the chunk-pair model's deployment path structurally inert
+under production scoring. Do not execute §3–§8 as written without a decision
+on what the model predicts — the surviving concept is a (query, chunk)
+relevance scorer, not this spec's (chunk, chunk) cross-encoder.
 **Owner:** Ivy
 **Target executor:** local coding agent
 **Type:** production build
