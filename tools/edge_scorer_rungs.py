@@ -167,10 +167,37 @@ def rung2(items, key, labels, run: Path) -> dict:
     return m
 
 
+def rung3(items, key, labels, run: Path, model_path: Path) -> dict:
+    """Distilled thin student (todo:f873d309). Same protocol as rung 2 but
+    max_length 512 — the student's own serving config."""
+    import torch
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_path, dtype=torch.float32)
+    model.eval()
+    scores = {}
+    order = sorted(items)
+    with torch.no_grad():
+        for i in range(0, len(order), 32):
+            batch = order[i:i + 32]
+            enc = tok([[items[j]["query"], items[j]["body"]] for j in batch],
+                      padding=True, truncation=True, max_length=512,
+                      return_tensors="pt")
+            logits = model(**enc).logits.view(-1)
+            for j, s in zip(batch, logits.tolist()):
+                scores[j] = s
+    m = metrics(items, key, labels, scores, "3: distilled MiniLM thin student")
+    (run / "rung3_scores.json").write_text(json.dumps(scores, indent=2))
+    return m
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--rung", type=int, choices=(1, 2))
+    ap.add_argument("--rung", type=int, choices=(1, 2, 3))
+    ap.add_argument("--model", type=Path,
+                    help="student checkpoint dir (rung 3)")
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--run", type=Path)
     args = ap.parse_args()
@@ -184,7 +211,14 @@ def main() -> None:
             print(json.dumps(json.loads(f.read_text()), indent=2))
         return
 
-    m = rung1(items, key, labels, run) if args.rung == 1 else rung2(items, key, labels, run)
+    if args.rung == 1:
+        m = rung1(items, key, labels, run)
+    elif args.rung == 2:
+        m = rung2(items, key, labels, run)
+    else:
+        if not args.model:
+            raise SystemExit("--rung 3 needs --model <checkpoint dir>")
+        m = rung3(items, key, labels, run, args.model)
     (run / f"rung{args.rung}_metrics.json").write_text(json.dumps(m, indent=2))
     print(json.dumps(m, indent=2))
 

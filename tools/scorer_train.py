@@ -23,12 +23,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import time
 from pathlib import Path
 
 SEED = 20260812
-STUDENT = "cross-encoder/ms-marco-MiniLM-L6-v2"
+STUDENT = os.environ.get("SCORER_STUDENT", "cross-encoder/ms-marco-MiniLM-L6-v2")
 
 
 def qh(query: str) -> str:
