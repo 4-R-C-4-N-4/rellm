@@ -73,3 +73,20 @@ Teacher batches, training, and the curation probe run on the 3090
 (`CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0`), released when done —
 owner authorized 2026-08-12 for this plan. Serving-side measurements are
 CPU-only, matching the lean-box constraint.
+
+## Outcome, 2026-08-13 (run 1 — see runs/edges/scorer/2026-08-13-run1/FINDINGS.md)
+
+| target | bar | result |
+|---|---|---|
+| params | ≤ 25M | **22.7M** ✓ |
+| teacher agreement | r ≥ 0.85 | **+0.878** held-out / **+0.852** frozen ✓ |
+| surfaced AUC | ≥ 0.74 | 0.723 (n=19 pos, SE ~0.06 — within noise) ~ |
+| gold-eval AUC | — | **0.883** strict |
+| ship gate | kept ≥ baseline | **61.5% vs 62.5%** strict, kappa +0.827 ✓ |
+| latency @1 thread | ≥ 100 pairs/s | **12 int8 — MISS** (65/s @8t; 26× teacher) ✗ |
+| load | ≤ 2s | **0.28s** ✓ |
+
+Student-3a2 selected (3b rejected: −0.07 teacher r for a bar it still
+misses). The 1-thread miss is documented and moot under the owner's
+no-sync-serving constraint. Curation probe delivered: 83.3% of PARALLELS
+edges carry a via concept; 2,825-edge suspect proposal awaiting the owner.
