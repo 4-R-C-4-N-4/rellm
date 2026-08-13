@@ -65,6 +65,11 @@ def main() -> None:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--allow-frozen", action="store_true",
                     help="permit frozen-work queries (gold-eval sampling only)")
+    ap.add_argument("--edge-boost", action="store_true",
+                    help="emit ONLY the edge stratum, with a lower anchor bar "
+                         "(match_weight >= 0.5), cap 20 partners/anchor, up to "
+                         "24 partners/query — corrective sampling for the "
+                         "operational stratum (1.2%% of the base run)")
     ap.add_argument("--seed", type=int, default=SEED)
     args = ap.parse_args()
     # Resolve before the chdir below, or relative paths silently break.
@@ -105,9 +110,32 @@ def main() -> None:
     n_rows = 0
     with open(args.out, "w") as out:
         for i, q in enumerate(queries):
-            qe = embed(q["query"])
             picked: dict[str, str] = {}   # chunk_id -> stratum (first wins)
 
+            if args.edge_boost:
+                walk = retriever._graph_walk(q["query"], prefs, conn)
+                anchors = {c["chunk_id"]: max(c.get("match_weight", 0), 0.5)
+                           for c in walk if c.get("match_weight", 0) >= 0.5}
+                if not anchors:
+                    continue
+                partners = legs.inherited_partners(conn, anchors, cap=20)
+                edge_ids = [p for p in partners if not is_apparatus(p)]
+                rng.shuffle(edge_ids)
+                for pid in edge_ids[:24]:
+                    picked[pid] = "edge"
+                for cid, stratum in picked.items():
+                    body = body_of(cid)
+                    if not body:
+                        continue
+                    out.write(json.dumps({
+                        "query": q["query"], "work": q["work"],
+                        "kind": q["kind"], "source": q["source"],
+                        "chunk_id": cid, "stratum": stratum, "body": body,
+                    }) + "\n")
+                    n_rows += 1
+                continue
+
+            qe = embed(q["query"])
             base = retriever.retrieve(q["query"], qe, prefs, top_k=15)
             for c in base:
                 if not is_apparatus(c.chunk_id):
