@@ -1,13 +1,13 @@
 {
   "id": "519f3554",
   "type": "feature",
-  "state": "open",
+  "state": "active",
   "summary": "Teacher labeling: bge fp32 logits over all sampled pairs, cached",
   "source": {
     "type": "human"
   },
   "created_at": "2026-08-12T23:50:35.868Z",
-  "updated_at": "2026-08-12T23:50:35.908Z",
+  "updated_at": "2026-08-13T00:05:19.214Z",
   "relationships": {
     "parent": "e2f907cf"
   },
