@@ -80,20 +80,30 @@ def main() -> None:
     partners_of = {}
     with open(args.out/"derived_parallels.jsonl","w") as out:
         for ch, concepts in bychunk.items():
+            # anchor gate: chunk must itself clear the floor on a concept for
+            # that concept to contribute partners
+            vias = [c for c in concepts
+                    if (score.get((c,ch)) or -99) >= args.min_grade]
+            # round-robin across via concepts, partners ranked by the
+            # PARTNER's own concept score (the anchor's score is a gate, not
+            # a rank — min-leg clamping made panels monochrome)
+            iters = {c: iter(ranked[c]) for c in vias}
             best = {}
-            for c in concepts:
-                a = score.get((c,ch))
-                if a is None or a < args.min_grade: continue
-                taken = 0
-                for other in ranked[c]:
-                    if taken >= args.top_k: break
-                    if other == ch or trad.get(other) == trad.get(ch): continue
+            picked_n = 0
+            while iters and picked_n < args.top_k * 2:
+                for c in list(iters):
+                    other = next(iters[c], None)
+                    if other is None:
+                        del iters[c]; continue
+                    if other == ch or trad.get(other) == trad.get(ch):
+                        continue
                     b = score.get((c,other))
-                    if b is None or b < args.min_grade: break
-                    g = min(a,b); taken += 1
-                    if other not in best or g > best[other][1]:
-                        best[other] = (c, g)
-            for other,(c,g) in sorted(best.items(), key=lambda kv:-kv[1][1])[:args.top_k*2]:
+                    if b is None or b < args.min_grade:
+                        del iters[c]; continue
+                    if other not in best:
+                        best[other] = (c, b)
+                        picked_n += 1
+            for other,(c,g) in sorted(best.items(), key=lambda kv:-kv[1][1]):
                 out.write(json.dumps({"chunk":ch,"partner":other,"via":c,
                                       "grade":round(g,3)})+"\n")
                 n_rows += 1
@@ -102,7 +112,23 @@ def main() -> None:
                "chunks_with_partners": sum(1 for v in partners_of.values() if v),
                "chunks_total": len(bychunk)},
               open(args.out/"summary.json","w"), indent=2)
-    print(f"wrote {args.out}: {n_rows} partner rows, "
+    # postgres-shaped TSV for the reader-panel snapshot trial:
+    # edges(source, target, edge_type, tier, weight, annotation), one
+    # direction per unique pair, annotation = the via explanation.
+    seen_pairs = set()
+    label = {c: c.split(".",1)[1].replace("_"," ") for c in defs}
+    with open(args.out/"edges_derived.tsv","w") as tsv:
+        for line in open(args.out/"derived_parallels.jsonl"):
+            r = json.loads(line)
+            k = (min(r["chunk"],r["partner"]), max(r["chunk"],r["partner"]))
+            if k in seen_pairs: continue
+            seen_pairs.add(k)
+            ann = (f"Shared concept: {label[r['via']]} — "
+                   f"{defs[r['via']].split('.')[0]}. (derived)")
+            tsv.write("\t".join([k[0], k[1], "PARALLELS", "inferred",
+                                 str(r["grade"]), ann]) + "\n")
+    print(f"wrote {args.out}: {n_rows} partner rows "
+          f"({len(seen_pairs)} unique pairs in edges_derived.tsv), "
           f"{sum(1 for v in partners_of.values() if v)}/{len(bychunk)} chunks have partners")
 
 if __name__ == "__main__":
