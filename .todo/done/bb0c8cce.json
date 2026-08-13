@@ -1,0 +1,21 @@
+{
+  "id": "bb0c8cce",
+  "type": "chore",
+  "state": "done",
+  "summary": "Ship gate on the student: EDGE_RERANK_MODEL in guru, A/B rerun, blind re-judge, lean-settings latency",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:36.180Z",
+  "updated_at": "2026-08-13T11:08:55.011Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "Small guru commit on edge-rerank-threshold (PR #61): EDGE_RERANK_MODEL env selects model path so the student drops into the existing term. Then the full gate protocol: inherit_ab --wide --rerank with student, judge --emit, two independent grading passes, report. Threshold recalibrated on student logits (same top-decile procedure). Ship decision and any enable-anywhere is the owner call; sync serving stays off unless the owner explicitly accepts the measured lean-settings cost.",
+  "resolution": {
+    "commit": "44a0791bedcf41215f8088627286087b571e5e2a",
+    "resolved_at": "2026-08-13T11:08:55.011Z",
+    "resolved_by": "unknown",
+    "note": "Ship gate on student-3a2 PASSED: 13 surfaced slots at 61.5% strict / 92.3% lenient vs baseline 62.5% / 87.5% (kappa +0.827, random floor 0%). Threshold -4.415 (top-11 procedure on student logits). Latency at gate: 2.2s median per scoring query (8 CPU threads, 0.017 s/pair, 26x teacher), 0.02s for the 98/110 quiet queries. EDGE_RERANK_MODEL + position-table cap committed to guru edge-rerank-threshold (c56633db + follow-up), PR #61 updated. Sync enable remains owner's call."
+  }
+}

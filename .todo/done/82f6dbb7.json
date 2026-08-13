@@ -1,0 +1,21 @@
+{
+  "id": "82f6dbb7",
+  "type": "feature",
+  "state": "done",
+  "summary": "Train student 3a: tiny cross-encoder distilled on teacher logits, training card in runs/edges/scorer/",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:36.010Z",
+  "updated_at": "2026-08-13T00:17:08.420Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "MiniLM-class (<=25M) cross-encoder, MSE/margin distillation on teacher logits over pairs.jsonl; optional light fine-tune on gold-cal. 3090 with per-run owner permission. Deliverables: checkpoint, training card (data hash, config, curves), and teacher-agreement number vs spec target. If the first student misses spec, try the second candidate architecture before touching the data.",
+  "resolution": {
+    "commit": "80682af5768bfd8273aa2054a89cec80ec871cee",
+    "resolved_at": "2026-08-13T00:17:08.420Z",
+    "resolved_by": "unknown",
+    "note": "Student 3a trained on 3090: 22.7M params, 4 epochs, val Pearson +0.8722 vs teacher on held-out queries (spec bar 0.85). Training card in runs/edges/scorer/2026-08-13-run1/student-3a/."
+  }
+}

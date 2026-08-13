@@ -1,13 +1,13 @@
 {
   "id": "e2f907cf",
   "type": "feature",
-  "state": "open",
+  "state": "done",
   "summary": "Thin fast (query,chunk) relevance scorer: distill the proven zero-shot signal into a lean-box model",
   "source": {
     "type": "human"
   },
   "created_at": "2026-08-12T23:50:02.967Z",
-  "updated_at": "2026-08-12T23:50:36.251Z",
+  "updated_at": "2026-08-13T11:09:36.051Z",
   "description": "Rung 3 of the scorer ladder, reframed after the 2026-08-12 measurements: distill bge-reranker-v2-m3 zero-shot (which passed the EDGE_RERANK ship gate on quality: 72.7% strict vs 62.5% baseline, kappa +1.0) into a model small and fast enough for the lean box.\n\nOwner intent: good data generation makes it faster and thinner — this was the original hope of the project.\n\nDesign constraints settled by the measurement record (docs/edges/query-scorer-rungs.md + addenda, runs/edges/relevance-judge/2026-08-12T{12-49-14,18-14-23,19-12-02}Z):\n- Architecture class: tiny CROSS-encoder. Bi-encoder cosine is disqualified for selection (four independent confirmations of the ceiling; its re-run AUC 0.686 is query-mix-dependent and collapses on specific-concept queries).\n- Data: teacher = bge fp32 logits at scale (no grading needed); gold = blind double-graded subsets under the proven (query,chunk) frame (kappa +0.800/+0.868/+1.000) for calibration and eval only.\n- Query distribution: trainable-work golden queries + ritual-style synthetic queries. WORK-DISJOINT DISCIPLINE: queries from frozenEval:true works never appear in training — they are the eval set. Provenance manifest mandatory.\n- Serving constraint (owner, 2026-08-12): no added CPU pressure in the RAG step. Primary deployment is offline edge curation and optional async scoring; synchronous enable only if the owner accepts the measured cost at ship gate.\n- GPU (3090) for teacher batches and training needs per-run owner permission; announce on start, release after.\n- Quality bar to preserve: surfaced-stratum AUC >= 0.74 (zero-shot bge) and ship-gate kept-slot strict >= baseline, on frozen-work queries.",
   "relationships": {
     "children": [
@@ -21,5 +21,11 @@
       "bb0c8cce",
       "10857362"
     ]
+  },
+  "resolution": {
+    "commit": "cea8038cdde0273a74828d4c42ae70016f71806d",
+    "resolved_at": "2026-08-13T11:09:36.051Z",
+    "resolved_by": "unknown",
+    "note": "All 9 children complete. Student-3a2 (22.7M): teacher agreement +0.878 held-out / +0.852 frozen-eval; gold-eval AUC 0.883; ship gate PASSED at baseline parity (61.5% vs 62.5% strict, kappa +0.827) at 26x teacher speed; curation probe delivered a 2,825-edge suspect proposal. 1-thread latency bar missed by both candidates (documented; its sync-serving rationale is owner-excluded)."
   }
 }

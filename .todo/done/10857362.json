@@ -1,0 +1,21 @@
+{
+  "id": "10857362",
+  "type": "chore",
+  "state": "done",
+  "summary": "Curation probe: grade all live PARALLELS edges offline against via-concept queries; suspect queue proposal, no writes",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:36.251Z",
+  "updated_at": "2026-08-13T11:09:35.993Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "The organized-better thread (owner, 2026-08-12): via = intersect the two chunks EXPRESSES concepts; grade each of the ~11,300 PARALLELS edges with the student against its via-concept canonical queries (per-concept static grading is legitimate; per-arbitrary-query static weights are the proven dead end). Deliverables: score distribution report, hub decomposition (the degree-177 Boehme hubs), empty-via count, and a suspect-edge queue PROPOSAL — queue-only, no guru.db writes, owner keeps the apply gate.",
+  "resolution": {
+    "commit": "36c9878b91655c81d4b9bb0a64d98ef6d1500f98",
+    "resolved_at": "2026-08-13T11:09:35.993Z",
+    "resolved_by": "unknown",
+    "note": "All 11,300 PARALLELS edges graded on GPU in minutes: 83.3% share >=1 EXPRESSES concept (via), 16.7% (1,884) share NONE — suspect by construction. 9,393 graded by min-leg student score vs their best via-concept; suspect queue PROPOSAL = 1,884 empty-via + 941 low-grade (bottom decile) = 2,825 edges (25%). Hub decomposition confirms Boehme.116 (deg 177) etc. No db writes; owner keeps the apply gate. NOTE: concept graph nodes are namespaced concept.<id> vs bare taxonomy keys — probe maps them."
+  }
+}

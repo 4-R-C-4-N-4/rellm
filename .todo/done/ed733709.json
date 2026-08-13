@@ -1,0 +1,21 @@
+{
+  "id": "ed733709",
+  "type": "chore",
+  "state": "done",
+  "summary": "Gold calibration + eval sets: blind double-grade ~300 stratified items; frozen-work-only eval split",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:35.945Z",
+  "updated_at": "2026-08-13T00:12:41.971Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "The established protocol (independent passes, disjoint contexts, key withheld, rubric verbatim from edge_relevance_judge.py). gold-cal: trainable-work queries, used for calibration/early-stop only. gold-eval: frozen-work queries ONLY, never seen in training, the number that decides. Report kappa; ABORT BAR: kappa < +0.6 means the batch is regraded, not used.",
+  "resolution": {
+    "commit": "ec90eedcc32e8f91055a0aebd04759f0d615da39",
+    "resolved_at": "2026-08-13T00:12:41.971Z",
+    "resolved_by": "unknown",
+    "note": "300 items double-graded blind (8 independent grader contexts): gold-cal kappa +0.849, gold-eval +0.876 — both clear the +0.6 abort bar. gold-eval is frozen-work queries only. Labels persisted to runs/edges/scorer/2026-08-13-run1/{gold-cal,gold-eval}/labels.json. Baseline stratum samples full top-15 depth (deliberate; not comparable to earlier top-1+middle controls)."
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "6ab430e5",
+  "type": "feature",
+  "state": "done",
+  "summary": "Pair sampler: per-query candidate strata (baseline top-K, edge partners, hard negatives, random) to pairs.jsonl",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:35.799Z",
+  "updated_at": "2026-08-13T00:05:19.168Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "tools/scorer_pairs.py, EDGE_GURU_ROOT-aware (guru worktree; never branch-switch the main checkout). Strata per query: baseline retriever top-K (positive-rich), anchored edge partners (the operational stratum, via inherited_partners), hard negatives (high vector-cosine chunks NOT retrieved), random floor. Cap per query per spec. Skip chunks in the known-apparatus list (guru-web todo:6e0c2a63 roll-up) for positive strata only. Output rows carry stratum + provenance for later analysis.",
+  "resolution": {
+    "commit": "4a61c3f33d5848941c63db5518284765c09c42f1",
+    "resolved_at": "2026-08-13T00:05:19.168Z",
+    "resolved_by": "unknown",
+    "note": "10,825 training pairs (baseline 7061 / hardneg 2598 / random 1039 / edge 127) from 520 queries; 1,830 frozen-eval pairs from 89 frozen-work queries. Bodies embedded at judged truncation (2400 chars); apparatus excluded from positive strata."
+  }
+}

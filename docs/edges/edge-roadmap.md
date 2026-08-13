@@ -598,3 +598,15 @@ or distillation is the remaining engineering line. Rung-3 fine-tune is now
 purely a kept-volume question. EDGE_RERANK defaults off; enabling is the
 owner's call. Records: `runs/edges/relevance-judge/2026-08-12T19-12-02Z/`
 and `runs/edges/inherit-ab/2026-08-12T19-11-27Z/`.
+
+### Addendum, 2026-08-13 — thin scorer shipped through its gate; the heap has a map
+
+Rung 3 complete (plan todo:e2f907cf, PR'd): bge distilled into a 22.7M
+MiniLM student (teacher r +0.878/+0.852 frozen; gold-eval AUC 0.883) that
+passes the ship gate at baseline parity (61.5% vs 62.5% strict, kappa
++0.827) at 26× teacher speed (2.2s/scoring query @8 CPU threads; 98/110
+queries stay at 0.02s). Curation probe over all 11,300 PARALLELS edges:
+83.3% carry a via concept (the "organized better" structure exists);
+2,825-edge suspect proposal (1,884 empty-via + 941 low-grade) awaits the
+owner's review — no db writes. Full record:
+runs/edges/scorer/2026-08-13-run1/FINDINGS.md.

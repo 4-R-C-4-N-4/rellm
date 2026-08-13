@@ -1,0 +1,21 @@
+{
+  "id": "2cf94434",
+  "type": "feature",
+  "state": "done",
+  "summary": "Query pool builder: trainable-work golden queries + ritual-style synthetic queries, with provenance manifest",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:35.730Z",
+  "updated_at": "2026-08-13T00:03:12.436Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "tools/scorer_query_pool.py. Sources: guru-web fixtures/golden-queries/*.json where frozenEval:false (relevance AND recall-probe kinds), plus synthetic queries generated per trainable work from its chunks under the ritual authoring rules (paraphrase anti-circularity, reader-honest anchors — docs/golden-queries.md in guru-web). Target ~500-1000 queries. Output: queries.jsonl with {query, work, tradition, source: golden|synthetic, kind}. HARD RULE: no query whose work has frozenEval:true; the manifest is the enforcement point.",
+  "resolution": {
+    "commit": "c2d6a22cebf3227955aa2c11cf450d97745fb869",
+    "resolved_at": "2026-08-13T00:03:12.436Z",
+    "resolved_by": "unknown",
+    "note": "Pool assembled: golden trainable-work queries + synthetic queries drafted from chunks by 9 agents across all 38 trainable works. Frozen-work exclusion enforced in the tool. Counts in commit."
+  }
+}

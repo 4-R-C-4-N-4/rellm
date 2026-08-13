@@ -1,0 +1,21 @@
+{
+  "id": "f873d309",
+  "type": "chore",
+  "state": "done",
+  "summary": "Rung-3 eval: extend edge_scorer_rungs.py with --rung 3 <model>; AUC + kept-slot vs rungs 1-2 + latency bench",
+  "source": {
+    "type": "human"
+  },
+  "created_at": "2026-08-12T23:50:36.097Z",
+  "updated_at": "2026-08-13T11:04:45.019Z",
+  "relationships": {
+    "parent": "e2f907cf"
+  },
+  "description": "Same judged sets (2026-08-12T18-14-23Z and gold-eval), same metrics, so the ladder table extends cleanly. Latency bench: pairs/s at 1 thread and 8 threads, fp32 and int8 (dynamic quantization), model load time. The doc table in query-scorer-rungs.md gets a rung-3 row.",
+  "resolution": {
+    "commit": "72b66658bd86e3b4e7f5c04b6f04625fca6c7250",
+    "resolved_at": "2026-08-13T11:04:45.019Z",
+    "resolved_by": "unknown",
+    "note": "Ladder on 18-14-23Z surfaced: cosine 0.686 / student-3a2 0.723 / teacher 0.742 (n=19 pos, SE~0.06 — 3a2 within noise of bar); gold-eval AUC 0.883 strict; sanity 0.922. Bench 3a2 (22.7M): 12 pairs/s int8@1t (SPEC MISS, bar 100), 65@8t, load 0.28s. 3b (15.6M, L2): 35@1t/152@8t but teacher r drops to +0.809 — rejected on quality. 3a2 selected; 1-thread bar miss documented (its rationale — sync serving — is excluded by owner constraint)."
+  }
+}
