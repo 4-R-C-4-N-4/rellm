@@ -25,7 +25,8 @@ class RellmPaths:
 @dataclass(frozen=True)
 class ModelCfg:
     base: str
-    teacher: str
+    exclude_model_prefixes: tuple[str, ...]  # student lineage — never distill on
+    exclude_models: tuple[str, ...]          # specific weak/experimental teachers
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,8 @@ def load(path: Path | None = None) -> Config:
         ),
         model=ModelCfg(
             base=raw["model"]["base"],
-            teacher=raw["model"]["teacher"],
+            exclude_model_prefixes=tuple(raw["model"].get("exclude_model_prefixes") or []),
+            exclude_models=tuple(raw["model"].get("exclude_models") or []),
         ),
         prompt=PromptCfg(version=raw["prompt"]["version"]),
     )

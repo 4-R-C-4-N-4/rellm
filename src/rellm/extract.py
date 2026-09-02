@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Sequence
 
 from rellm.corpus import chunk_body, chunk_citation
 
@@ -32,28 +32,41 @@ def iter_teacher_chunks(
     conn: sqlite3.Connection,
     corpus_dir: Path,
     *,
-    teacher_model: str,
+    exclude_prefixes: Sequence[str] = (),
+    exclude_models: Sequence[str] = (),
     prompt_version: str,
     status: tuple[str, ...] = ("pending", "accepted"),
     limit: int | None = None,
 ) -> Iterator[TaggedChunk]:
-    """Yield one TaggedChunk per chunk that has staged_tags from this teacher.
+    """Yield one TaggedChunk per chunk with usable teacher staged_tags.
 
-    Filters by (model, prompt_version, status). Aggregates rows into one
-    record per chunk_id. Skips chunks whose body isn't resolvable on disk.
+    Takes every tag (any model) matching (prompt_version, status) EXCEPT models
+    whose signature starts with an `exclude_prefixes` entry or exactly matches an
+    `exclude_models` entry. This denylist shape is deliberate: staged_tags.model
+    is unreliable free-text (tag_concepts.py --model default, not the loaded
+    gguf), so an allowlist would silently drop a mislabeled teacher. The one
+    invariant is excluding the student's own lineage (self-distillation). Rows are
+    aggregated into one record per chunk_id; chunks whose body isn't resolvable on
+    disk are skipped.
     """
     placeholders = ",".join("?" for _ in status)
+    where = ["s.prompt_version = ?", f"s.status IN ({placeholders})"]
+    params: list = [prompt_version, *status]
+    for pref in exclude_prefixes:
+        where.append("s.model NOT LIKE ?")
+        params.append(pref + "%")
+    if exclude_models:
+        ph = ",".join("?" for _ in exclude_models)
+        where.append(f"s.model NOT IN ({ph})")
+        params.extend(exclude_models)
     sql = f"""
         SELECT s.chunk_id, s.concept_id, s.score, s.justification,
                s.is_new_concept, s.new_concept_def, s.status, n.tradition_id
         FROM staged_tags s
         JOIN nodes n ON n.id = s.chunk_id
-        WHERE s.model = ?
-          AND s.prompt_version = ?
-          AND s.status IN ({placeholders})
+        WHERE {" AND ".join(where)}
         ORDER BY s.chunk_id, s.concept_id
     """
-    params = [teacher_model, prompt_version, *status]
     rows = conn.execute(sql, params)
 
     current_id: str | None = None

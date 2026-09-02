@@ -15,12 +15,23 @@ snapshots = "data/snapshots"
 exports   = "data/exports"
 
 [model]
-# Default base model for distillation. Unsloth's 4-bit BNB build of
-# Qwen2.5-7B-Instruct. Swap to Qwen3-8B once benchmarked.
-base    = "unsloth/Qwen2.5-7B-Instruct-bnb-4bit"
+# Pipeline-level default only — the actual training base is set per-run in the
+# YAML config's `base_model` (train_distill.py reads that, not this). The guru
+# line trains on Qwen3-4B-Instruct-2507 (smaller than the old 7B, chosen for
+# parallel-tagging throughput). Kept here for reference/back-compat.
+base    = "unsloth/Qwen3-4B-Instruct-2507-bnb-4bit"
 
-# Teacher signature in staged_tags. Used to filter training rows.
-teacher = "Qwen3.5-27B-UD-Q4_K_XL.gguf"
+# The EXPORT does not allowlist teacher signatures — staged_tags.model is
+# unreliable free-text (tag_concepts.py --model default, not the loaded gguf), so
+# an allowlist would silently drop a mislabeled teacher run. Instead the export
+# takes every tag EXCEPT the excluded ones below. The one invariant that matters:
+# never distill on the student's own lineage (self-reinforcing error).
+
+# Student lineage — the finetune's own tags. NEVER train on these.
+exclude_model_prefixes = ["qwen-3-4b-guru"]
+# Specific weak/experimental teachers to drop. Carnice-9b: 86 chunks, all
+# already 27B-covered (0 unique) — excluding keeps 27B-only targets.
+exclude_models = ["Carnice-9b"]
 
 [prompt]
 # staged_tags prompt_version filter. Bump when the upstream prompt changes

@@ -60,6 +60,27 @@ def _ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
 
 
+def _contributing_models(conn, exclude_prefixes, exclude_models, prompt_version, statuses):
+    """Model signatures (with row counts) that survive the export denylist —
+    real provenance read from the data, not the label config."""
+    ph = ",".join("?" for _ in statuses)
+    where = ["prompt_version = ?", f"status IN ({ph})"]
+    params: list = [prompt_version, *statuses]
+    for pref in exclude_prefixes:
+        where.append("model NOT LIKE ?")
+        params.append(pref + "%")
+    if exclude_models:
+        mph = ",".join("?" for _ in exclude_models)
+        where.append(f"model NOT IN ({mph})")
+        params.extend(exclude_models)
+    rows = conn.execute(
+        f"SELECT model, COUNT(*) FROM staged_tags WHERE {' AND '.join(where)} "
+        f"GROUP BY model ORDER BY 2 DESC",
+        params,
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
 @app.command()
 def stats(
     snapshot: Path = typer.Option(None, help="Snapshot path (file or dir); else latest, else data/guru.db"),
@@ -80,20 +101,6 @@ def stats(
                 f"  {r['model']:<42} {r['prompt_version']:<6} "
                 f"{r['status']:<10} {r['n']:>6}"
             )
-        typer.echo("")
-        teacher_total = conn.execute(
-            "SELECT COUNT(*) FROM staged_tags WHERE model = ? AND prompt_version = ?",
-            (cfg.model.teacher, cfg.prompt.version),
-        ).fetchone()[0]
-        chunks_with_teacher = conn.execute(
-            "SELECT COUNT(DISTINCT chunk_id) FROM staged_tags "
-            "WHERE model = ? AND prompt_version = ?",
-            (cfg.model.teacher, cfg.prompt.version),
-        ).fetchone()[0]
-        typer.echo(
-            f"teacher={cfg.model.teacher} prompt={cfg.prompt.version}: "
-            f"{teacher_total} tags across {chunks_with_teacher} chunks"
-        )
 
 
 @app.command()
@@ -131,6 +138,13 @@ def export(
     limit: int = typer.Option(0, help="Max chunks (0 = no limit)"),
     out: Path = typer.Option(None, help="Output jsonl; else data/exports/<ts>/sft.jsonl"),
     status: str = typer.Option("pending,accepted", help="Comma-separated staged_tags statuses to include"),
+    exclude_model: str = typer.Option(
+        None, "--exclude-model",
+        help="Comma-separated exact model signatures to drop, on top of "
+             "cfg.model.exclude_model_prefixes / exclude_models. The export "
+             "takes every other teacher tag (denylist, not allowlist — the "
+             "model signature is unreliable free-text).",
+    ),
     taxonomy: Path = typer.Option(
         None, "--taxonomy",
         help="taxonomy.toml to bake into prompts; else cfg.guru.taxonomy. "
@@ -150,13 +164,24 @@ def export(
         out.parent.mkdir(parents=True, exist_ok=True)
 
     statuses = tuple(s.strip() for s in status.split(",") if s.strip())
+    exclude_prefixes = cfg.model.exclude_model_prefixes
+    exclude_models = tuple(cfg.model.exclude_models) + (
+        tuple(m.strip() for m in exclude_model.split(",") if m.strip())
+        if exclude_model else ()
+    )
     concepts = load_taxonomy(taxonomy or cfg.guru.taxonomy)
 
     with open_db(db_path) as conn:
+        # Record real provenance from the data, not the (unreliable) label config:
+        # which model signatures actually survive the filter and contribute rows.
+        contributing = _contributing_models(
+            conn, exclude_prefixes, exclude_models, cfg.prompt.version, statuses
+        )
         chunks = iter_teacher_chunks(
             conn,
             cfg.guru.corpus_dir,
-            teacher_model=cfg.model.teacher,
+            exclude_prefixes=exclude_prefixes,
+            exclude_models=exclude_models,
             prompt_version=cfg.prompt.version,
             status=statuses,
             limit=limit or None,
@@ -166,7 +191,9 @@ def export(
     manifest = {
         "created_at": _ts(),
         "snapshot": str(db_path),
-        "teacher": cfg.model.teacher,
+        "excluded_model_prefixes": list(exclude_prefixes),
+        "excluded_models": list(exclude_models),
+        "contributing_models": contributing,
         "prompt_version": cfg.prompt.version,
         "status_filter": list(statuses),
         "n_examples": n,
