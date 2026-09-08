@@ -28,6 +28,18 @@ class TaggedChunk:
     tags: list[TeacherTag]
 
 
+def _supersedes(new: TeacherTag, old: TeacherTag) -> bool:
+    """Dedup preference when >1 teacher row exists for the same (chunk, concept).
+
+    A concept must appear at most once in a chunk's target (duplicate keys are
+    contradictory training signal). Prefer an applied/accepted row over a bare
+    pending label, then the stronger score. Applied tags are the owner-gated
+    truth; a pending label is just something a model threw at the chunk.
+    """
+    rank = {"accepted": 1}
+    return (rank.get(new.status, 0), new.score) > (rank.get(old.status, 0), old.score)
+
+
 def iter_teacher_chunks(
     conn: sqlite3.Connection,
     corpus_dir: Path,
@@ -46,8 +58,9 @@ def iter_teacher_chunks(
     is unreliable free-text (tag_concepts.py --model default, not the loaded
     gguf), so an allowlist would silently drop a mislabeled teacher. The one
     invariant is excluding the student's own lineage (self-distillation). Rows are
-    aggregated into one record per chunk_id; chunks whose body isn't resolvable on
-    disk are skipped.
+    aggregated into one record per chunk_id and deduped to one tag per concept (see
+    ``_supersedes``) so two teachers agreeing on a tag emit it once; chunks whose
+    body isn't resolvable on disk are skipped.
     """
     placeholders = ",".join("?" for _ in status)
     where = ["s.prompt_version = ?", f"s.status IN ({placeholders})"]
@@ -71,7 +84,7 @@ def iter_teacher_chunks(
 
     current_id: str | None = None
     current_tradition: str | None = None
-    tags: list[TeacherTag] = []
+    tags: dict[str, TeacherTag] = {}
     emitted = 0
 
     def finalize() -> TaggedChunk | None:
@@ -85,7 +98,7 @@ def iter_teacher_chunks(
             body=body,
             citation=chunk_citation(current_id, corpus_dir),
             tradition_id=current_tradition,
-            tags=tags.copy(),
+            tags=list(tags.values()),
         )
 
     for r in rows:
@@ -98,15 +111,18 @@ def iter_teacher_chunks(
                     return
             current_id = r["chunk_id"]
             current_tradition = r["tradition_id"]
-            tags = []
-        tags.append(TeacherTag(
+            tags = {}
+        tag = TeacherTag(
             concept_id=r["concept_id"],
             score=r["score"],
             justification=r["justification"],
             is_new_concept=bool(r["is_new_concept"]),
             new_concept_def=r["new_concept_def"],
             status=r["status"],
-        ))
+        )
+        kept = tags.get(tag.concept_id)
+        if kept is None or _supersedes(tag, kept):
+            tags[tag.concept_id] = tag
 
     done = finalize()
     if done is not None:

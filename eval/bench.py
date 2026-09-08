@@ -123,11 +123,15 @@ def main() -> None:
 
     db = _resolve_db(cfg, args.snapshot)
     with open_db(db) as conn:
+        # Grade against the owner-applied (accepted) labels — the vetted positives,
+        # consistent with v5's accepted-only training target. Denylist matches the
+        # export (cfg.model.teacher was removed in the v4 config cleanup).
         all_chunks = list(iter_teacher_chunks(
             conn, cfg.guru.corpus_dir,
-            teacher_model=cfg.model.teacher,
+            exclude_prefixes=cfg.model.exclude_model_prefixes,
+            exclude_models=cfg.model.exclude_models,
             prompt_version=cfg.prompt.version,
-            status=("pending", "accepted", "rejected"),
+            status=("accepted",),
         ))
 
     if args.all_curated:

@@ -20,13 +20,29 @@ tags:
 
 A fast chunk→concept tagger for the [guru](https://github.com/4-R-C-4-N-4) comparative-religion indexing pipeline. Fine-tuned from [Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) on (passage, tag-set) pairs — teacher labels from a 27B model, refined by human review — this model scores passages from mystical texts against guru's concept taxonomy.
 
-**v3 (current).** Trains natively on the full, live 110-concept taxonomy at 9,472 context (v1/v2 were stuck on a pinned 88-concept fallback by a taxonomy-loader bug and an unset flash-attn dependency, both fixed for this release). The training corpus also went through four rounds of quarantine review that corrected ~2,600 cross-tradition "false friend" tags a prior root-cause investigation traced from v2's regression. v1 was published under the `qwen-3-4b-guru-v1` tag; v2 was an internal-only retrain that regressed and was never published (see [Evaluation](#evaluation) and the [regression autopsy](https://github.com/4-R-C-4-N-4/rellm/blob/main/docs/qwen-3-4b-v2-regression-autopsy.md) for why). This release met no formal ship gates (none were set); see [Limitations](#limitations) for exactly what was and wasn't measured.
+**v5 (current).** Trains natively on the full, live **154-concept** taxonomy at **16,384** context. Its purpose is **cross-tradition backfill**: the taxonomy grew by 44 concepts after v3, and older works — tagged before those concepts existed — needed the new vocabulary applied where it genuinely fits (e.g. `incarnation` on a Hindu avatāra passage, `divine_immanence` on Neoplatonic and Taoist text). v4 (internal-only, never published — like v2) learned the new concepts only in their modern Western-esoteric flavour because it had **zero** cross-tradition training examples of them; v5 fixes this by folding in a reviewed 27B sample-pass over older traditions, so the applied cross-tradition tags become training positives. The v5 export is **applied-tags-only** (owner-accepted labels, deduped one tag per (chunk, concept)). Result: v5 beats v4 on held-out tagging **and** recovers the backfill v4 could not — see [Evaluation](#evaluation). v1/v3 were published under the `qwen-3-4b-guru-v1` / `-v3` tags; v2 and v4 were internal-only. This release met no formal ship gates (none were set); see [Limitations](#limitations) for exactly what was and wasn't measured.
 
 ## What it does
 
 Given a passage and a list of candidate concepts (each `{id, definition}`), the model returns a JSON array rating every present concept 0–3 (0=absent … 3=central theme); concepts scoring 0 are omitted. Output is strict JSON, no prose. The prompt contract matches the guru tagging caller exactly.
 
 ## Evaluation
+
+### v5 benchmark: base vs v4 vs v5
+
+Head-to-head on v5's held-out test split (223 chunks), all models given the full live 154-concept taxonomy in every prompt, graded against the owner-accepted (vetted) labels. Temperature 0 via llama-server, identical prompts.
+
+**vs accepted labels:**
+
+| model | precision | recall | F1 | macro-F1 | MAE | tags/chunk | OOT-IDs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| base | 0.120 | 0.503 | 0.194 | 0.134 | 0.51 | 44.7 | 31 |
+| v4 | 0.236 | 0.480 | 0.316 | 0.243 | 0.40 | 11.3 | 5 |
+| **v5** | **0.279** | **0.537** | **0.367** | **0.274** | **0.31** | 10.7 | 4 |
+
+v5 improves on v4 across every axis — precision, recall, F1 (+16% relative), lower error, fewer invented IDs — while staying disciplined (base's higher raw recall is a "shotgun" artifact: 44.7 tags/chunk at precision 0.12).
+
+**Backfill probe (the point of v5).** On 32 held-out older-tradition cells where one of the 12 backfill concepts is a vetted positive on a chunk the model never trained on, v5 surfaces the target at score ≥2 on **19/32** cells versus v4's **3/32** — recovering the cross-tradition capability v4 lacked, with discipline intact. Guards held: `psychic_attack` stayed silent on Kalevala runo-magic (routed to `word_power_incantation`), `occult_police` fired nowhere. Weak spots are the thinnest concepts (trinity, talisman_magic, spirit_conjuration), where too few older chunks were surfaced in the sample-pass. Full detail: [v5 findings](https://github.com/4-R-C-4-N-4/rellm/blob/main/docs/qwen-3-4b-guru-v5-findings.md).
 
 ### v3 benchmark: base vs v1 vs v2 vs v3
 
@@ -63,18 +79,19 @@ Held-out test split (293 chunks the model never trained on), scored against both
 - **Method:** QLoRA (TRL `SFTTrainer` via [Unsloth](https://github.com/unslothai/unsloth))
 - **LoRA:** r=32, α=64, dropout 0, all attention + MLP projections
 - **Schedule:** 3 epochs, batch 1 × grad-accum 16, paged AdamW-8bit, lr 1.5e-4 cosine, warmup 0.03
-- **Sequence length:** 9,472 (v1/v2 were capped at 6,144 by an OOM ceiling later root-caused to flash-attn silently never being installed — the fallback Xformers path is far less memory-efficient at long context. With flash-attn 2.8.3.post1 compiled from source, 9,472 trains cleanly on a single 24 GB 3090. The richer 110-concept definitions block alone runs ~5,939 tokens; 9,472 covers the full observed example-length range, 6,273–9,294 tokens, with zero examples dropped)
+- **Sequence length:** 16,384 (the 154-concept definitions block alone is ~11,439 tokens; 16,384 covers the full observed example-length range with zero examples dropped, and trains at 12.8 GB peak on a single 24 GB 3090 with flash-attn 2.8.3)
 - **Chat template:** Qwen3 ChatML (`qwen3-instruct`)
-- **Checkpoint:** best-by-val-loss, final step 594 (eval_loss 0.2701, improved monotonically through training)
-- **Hardware:** single RTX 3090 (24 GB); resumed once from checkpoint-300 after an external interruption at step 370
+- **Checkpoint:** best-by-val-loss, final step 753 (eval_loss 0.1788, improved monotonically through training — no overfit)
+- **Hardware:** single RTX 3090 (24 GB), ~29.4 h
 - **Seed:** 42
 
 ### Training data
 
-Source: `staged_tags` from a guru.db snapshot, post-quarantine (four review batches correcting ~2,600 cross-tradition false-friend / blanket-tagged / lexically-keyed tags — see the [regression autopsy](https://github.com/4-R-C-4-N-4/rellm/blob/main/docs/qwen-3-4b-v2-regression-autopsy.md)), teacher `Qwen3.5-27B-UD-Q4_K_XL.gguf`.
+Source: `staged_tags` from a guru.db snapshot, **applied-tags-only** — owner-accepted (vetted) labels, deduped to one tag per (chunk, concept). Teacher signatures are 27B (`Qwen3.5`/`Qwen3.8`, an unreliable free-text label — the export takes every non-student, non-Carnice teacher tag rather than allowlisting a signature).
 
-- **3,504 examples**, **110 concepts** (the full live guru taxonomy — domain → family → concept, three tiers)
-- Splits by chunk_id: 3,161 train / 162 val / 181 test
+- **4,440 examples / 25,402 tags**, **154 concepts** (the full live guru taxonomy — domain → family → concept, three tiers)
+- Splits by chunk_id: 4,008 train / 209 val / 223 test
+- Includes the reviewed cross-tradition backfill positives for the 12 drift concepts (trinity, stellar_determinism, divine_immanence, initiation, divination, esoteric_lineage, exorcism, gender, spirit_conjuration, incarnation, qliphoth, talisman_magic)
 
 The taxonomy this model expects is pinned in `taxonomy.toml` in this repo, matching guru's live taxonomy at training time.
 
@@ -82,14 +99,15 @@ The taxonomy this model expects is pinned in `taxonomy.toml` in this repo, match
 
 - `adapter/` — LoRA adapter (~260 MB); the canonical artifact
 - `merged/` — adapter merged into base, FP16 (~8 GB)
-- `gguf/qwen-3-4b-guru-v3-Q4_K_M.gguf` — 4-bit, recommended for serving
-- `gguf/qwen-3-4b-guru-v3-F16.gguf` — full-precision conversion
-- `taxonomy.toml` — the 110-concept taxonomy (prompt contract)
+- `gguf/qwen-3-4b-guru-v5-Q4_K_M.gguf` — 4-bit, recommended for serving (also aliased as `qwen-3-4b-guru-Q4_K_M.gguf`)
+- `gguf/qwen-3-4b-guru-v5-F16.gguf` — full-precision conversion
+- `taxonomy.toml` — the 154-concept taxonomy (prompt contract)
+- Prior-version gguf (`-v3-`) are retained in `gguf/`.
 
 ## Usage
 
 ```bash
-llama-server -m qwen-3-4b-guru-v3-Q4_K_M.gguf --jinja --port 8080
+llama-server -m qwen-3-4b-guru-v5-Q4_K_M.gguf --jinja --port 8080
 ```
 
 The guru tagging caller hits the OpenAI-compatible `/v1/chat/completions` endpoint. The model expects the exact prompt structure used at training time (system role + passage + 0–3 rubric + JSON concept list); deviating degrades quality.
@@ -99,7 +117,8 @@ The guru tagging caller hits the OpenAI-compatible `/v1/chat/completions` endpoi
 - **Exploratory release.** No formal throughput benchmark and no quantization sweep were run; only Q4_K_M is provided and serving throughput at concurrency is unmeasured. Treat the eval as a sound point estimate, not a gated guarantee.
 - **Domain-locked.** The corpus is heavily Mediterranean / Greek-philosophical; calibration on East-Asian, South-Asian, and indigenous traditions is weaker.
 - **Taxonomy-bound.** Scoring is conditioned on the concept list in the prompt. Use the pinned `taxonomy.toml`; if guru's live taxonomy drifts meaningfully from this snapshot, retrain.
-- **Label noise.** A portion of training targets are unreviewed teacher labels, so the model inherits some of the teacher's tagging tendencies on un-reviewed concepts. Quarantine review corrected the worst systematic contamination (cross-tradition false friends) but was not an exhaustive per-tag re-review.
+- **Thin cross-tradition concepts.** The backfill recovers most drift concepts on older traditions, but the thinnest (trinity, talisman_magic, spirit_conjuration) had too few older chunks surfaced in the 27B sample-pass and are under-tagged on held-out cells; a larger sample-pass would close them.
+- **Label provenance.** v5 trains on owner-accepted labels only (a shift from prior versions, which included unreviewed teacher tags). Accepted labels are vetted but the teacher's tendencies still shape which tags were proposed for review in the first place.
 - **Not a chat model.** Tuned on a single task and prompt format.
 
 ## License
